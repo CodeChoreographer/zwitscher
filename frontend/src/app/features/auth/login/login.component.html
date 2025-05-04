@@ -1,0 +1,46 @@
+<div class="min-h-screen flex items-center justify-center bg-gray-900 text-white px-4">
+  <div class="w-full max-w-md bg-gray-800 p-8 rounded-xl shadow-xl">
+    <h2 class="text-3xl font-bold text-orange-500 mb-6 text-center">Anmeldung 🐦</h2>
+
+    <form (ngSubmit)="onSubmit()" novalidate>
+
+      <div class="mb-4">
+        <label class="block mb-1 text-sm font-semibold">Benutzername</label>
+        <input
+          type="text"
+          [(ngModel)]="username"
+          name="username"
+          required
+          class="w-full p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
+        />
+      </div>
+
+      <div class="mb-4">
+        <label class="block mb-1 text-sm font-semibold">Passwort</label>
+        <input
+          type="password"
+          [(ngModel)]="password"
+          name="password"
+          required
+          class="w-full p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
+        />
+      </div>
+
+      <button
+        type="submit"
+        [disabled]="!isFormValid"
+        class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded transition disabled:opacity-50"
+      >
+        Einloggen
+      </button>
+
+      <div class="mt-6 text-center text-sm">
+        Noch kein Konto?
+        <button (click)="goToRegister()" class="text-orange-400 hover:underline ml-1">
+          Registrieren
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>
