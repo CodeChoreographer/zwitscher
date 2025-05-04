@@ -2,12 +2,20 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('../database/db');
 
+function isPasswordStrong(password) {
+    const regex = /^(?=.*[0-9])(?=.*[\W_]).{8,}$/;
+    return regex.test(password);
+}
+
 class UserController {
     async register(req, res) {
         const { username, password } = req.body;
 
         if (!username || !password)
             return res.status(400).json({ message: 'Benutzername und Passwort sind erforderlich.' });
+
+        if (!isPasswordStrong(password))
+            return res.status(400).json({ message: 'Passwort zu schwach. Es muss mindestens 8 Zeichen, eine Zahl und ein Sonderzeichen enthalten.' });
 
         try {
             const hashedPassword = await bcrypt.hash(password, 10);
