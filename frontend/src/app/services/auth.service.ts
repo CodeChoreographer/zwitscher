@@ -13,4 +13,13 @@ export class AuthService {
       return null;
     }
   }
+
+  logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('username');
+  }
+
+  isLoggedIn(): boolean {
+    return !!localStorage.getItem('token');
+  }
 }
