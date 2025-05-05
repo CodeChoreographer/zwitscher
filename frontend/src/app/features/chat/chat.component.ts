@@ -17,16 +17,36 @@ export class ChatComponent implements OnInit, OnDestroy {
   messages: { user: string; text: string; time: string }[] = [];
   message = '';
   username = '';
+  typingUser: string | null = null;
+  typingTimeout: any;
+  activeUsers: string[] = [];
+
 
   constructor(private socketService: SocketService, private auth: AuthService) {}
 
   ngOnInit() {
-    this.username = this.auth.getUsername() ?? 'Unbekannter Benutzer';
+      this.username = this.auth.getUsername() ?? 'Unbekannter Benutzer';
+
+      this.socketService.connect();
+
+      this.socketService.emit('registerUser', this.username);
+
+      this.socketService.on('activeUsers', (users: string[]) => {
+        this.activeUsers = users;
+      });
 
     this.socketService.connect();
 
-    this.socketService.on('chatMessage', (msg: { user: string; text: string; time: string }) => {
+    this.socketService.on('chatMessage', (msg: any) => {
       this.messages.push(msg);
+    });
+
+    this.socketService.on('typing', (username: string) => {
+      this.typingUser = username;
+    });
+
+    this.socketService.on('stopTyping', () => {
+      this.typingUser = null;
     });
   }
 
@@ -50,6 +70,13 @@ export class ChatComponent implements OnInit, OnDestroy {
   handleKeyDown(event: KeyboardEvent) {
     if (event.key === 'Enter') {
       this.sendMessage();
+    } else {
+      this.socketService.emit('typing', this.username);
+
+      clearTimeout(this.typingTimeout);
+      this.typingTimeout = setTimeout(() => {
+        this.socketService.emit('stopTyping');
+      }, 2000);
     }
   }
 }
