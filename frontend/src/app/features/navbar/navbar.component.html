@@ -1,26 +1,14 @@
-<header class="sticky top-0 z-50 flex justify-between items-center px-4 py-2 bg-gray-900 text-white shadow">
-  <div class="flex items-center space-x-2">
-    <img
-      src="assets/zwitscher_logo_transparent.png"
-      alt="Zwitscher"
-      class="h-10 w-10 cursor-pointer"
-      (click)="router.navigate(['/'])"
-    />
-    <button
-      (click)="router.navigate(['/chat'])"
-      class="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-4 py-1 rounded"
-    >
-      Public Chat
-    </button>
-  </div>
-
+<nav class="flex items-center justify-between px-6 py-4 bg-gray-900 border-b border-gray-700 text-white">
+  <a routerLink="/" class="flex items-center space-x-2">
+    <img src="assets/zwitscher_logo_transparent.png" alt="Zwitscher Logo" class="h-10 w-auto" /> </a>
   <div class="flex items-center space-x-4">
-    <span class="text-sm text-gray-400 hidden sm:inline">Hallo, {{ username }}</span>
-    <button
-      (click)="logout()"
-      class="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-4 py-1 rounded"
-    >
-      Abmelden
-    </button>
+
+
+    @if (isLoggedIn()) {
+      <a routerLink="/profile" class="bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 px-6 rounded transition">Mein Profil</a>
+      <button (click)="logout()" class="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-4 py-2 rounded">
+        Abmelden
+      </button>
+    }
   </div>
-</header>
+</nav>

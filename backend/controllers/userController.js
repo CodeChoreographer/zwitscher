@@ -65,6 +65,70 @@ class UserController {
             res.status(500).json({ message: 'Fehler beim Login.' });
         }
     }
+
+    async getProfile(req, res) {
+        try {
+            const userId = req.user.userId;
+            const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [userId]);
+
+            if (!user) return res.status(404).json({ message: 'Benutzer nicht gefunden.' });
+
+            res.json(user);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ message: 'Fehler beim Laden des Profils.' });
+        }
+    }
+
+    async updateUsername(req, res) {
+        const { newUsername } = req.body;
+        const userId = req.user.userId;
+
+        if (!newUsername || !newUsername.trim())
+            return res.status(400).json({ message: 'Neuer Benutzername ist erforderlich.' });
+
+        try {
+            await db.query('UPDATE users SET username = ? WHERE id = ?', [newUsername, userId]);
+            res.json({ message: 'Benutzername aktualisiert.' });
+        } catch (err) {
+            if (err.code === 'ER_DUP_ENTRY') {
+                res.status(409).json({ message: 'Benutzername bereits vergeben.' });
+            } else {
+                console.error(err);
+                res.status(500).json({ message: 'Fehler beim Ändern des Benutzernamens.' });
+            }
+        }
+    }
+
+    async changePassword(req, res) {
+        const { oldPassword, newPassword } = req.body;
+        const userId = req.user.userId;
+
+        if (!oldPassword || !newPassword)
+            return res.status(400).json({ message: 'Altes und neues Passwort sind erforderlich.' });
+
+        if (!isPasswordStrong(newPassword))
+            return res.status(400).json({ message: 'Neues Passwort ist zu schwach. Es muss mindestens 8 Zeichen, eine Zahl und ein Sonderzeichen enthalten.' });
+
+        try {
+            const [[user]] = await db.query('SELECT password_hash FROM users WHERE id = ?', [userId]);
+            const match = await bcrypt.compare(oldPassword, user.password_hash);
+
+            if (!match)
+                return res.status(401).json({ message: 'Altes Passwort ist falsch.' });
+
+            const hashedPassword = await bcrypt.hash(newPassword, 10);
+            await db.query('UPDATE users SET password_hash = ? WHERE id = ?', [hashedPassword, userId]);
+
+            res.json({ message: 'Passwort erfolgreich geändert.' });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ message: 'Fehler beim Ändern des Passworts.' });
+        }
+    }
+
+
+
 }
 
 module.exports = { UserController };

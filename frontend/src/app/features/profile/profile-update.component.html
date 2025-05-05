@@ -1,0 +1,51 @@
+<div class="min-h-screen bg-gray-900 flex items-center justify-center px-4">
+  <div class="w-full max-w-xl bg-gray-800 text-white rounded shadow p-6">
+    <h2 class="text-2xl font-bold text-orange-400 mb-6 text-center">👤 Mein Profil</h2>
+
+    <p class="text-center mb-6 text-gray-300">
+      Aktueller Benutzername: <span class="text-white font-semibold">{{ currentUsername }}</span>
+    </p>
+
+    <div class="mb-6">
+      <label class="block mb-1 text-sm text-gray-300">Neuer Benutzername</label>
+      <input
+        [(ngModel)]="newUsername"
+        class="w-full p-2 rounded bg-gray-700 text-white border border-gray-600"
+        placeholder="Neuer Benutzername"
+      />
+      <button
+        (click)="updateUsername()"
+        class="w-full mt-2 bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded text-white font-semibold"
+      >
+        Benutzernamen ändern
+      </button>
+    </div>
+
+    <hr class="my-6 border-gray-600" />
+
+    <div>
+      <label class="block mb-1 text-sm text-gray-300">Altes Passwort</label>
+      <input
+        type="password"
+        [(ngModel)]="oldPassword"
+        class="w-full p-2 rounded bg-gray-700 text-white border border-gray-600 mb-3"
+        placeholder="Altes Passwort"
+      />
+
+      <label class="block mb-1 text-sm text-gray-300">Neues Passwort</label>
+      <input
+        type="password"
+        [(ngModel)]="newPassword"
+        class="w-full p-2 rounded bg-gray-700 text-white border border-gray-600"
+        placeholder="Neues Passwort"
+      />
+
+      <button
+        (click)="changePassword()"
+        class="w-full mt-3 bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded text-white font-semibold"
+      >
+        Passwort ändern
+      </button>
+    </div>
+  </div>
+</div>

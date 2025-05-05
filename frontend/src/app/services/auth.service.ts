@@ -14,12 +14,14 @@ export class AuthService {
     }
   }
 
+  isLoggedIn(): boolean {
+    const token = localStorage.getItem('token');
+    return !!token;
+  }
+
   logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
-  }
-
-  isLoggedIn(): boolean {
-    return !!localStorage.getItem('token');
+    window.location.href = '/';
   }
 }

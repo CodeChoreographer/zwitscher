@@ -12,4 +12,7 @@ import {AuthService} from '../../services/auth.service';
 export class HomepageComponent {
   constructor(public auth: AuthService) {}
 
+  isLoggedIn(): boolean {
+    return !!localStorage.getItem('token');
+  }
 }

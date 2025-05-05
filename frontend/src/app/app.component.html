@@ -1,9 +1,4 @@
-<div class="flex flex-col h-full">
-  @if (auth.isLoggedIn()) {
-    <app-navbar />
-  }
-
-  <div class="flex-1 min-h-0">
-    <router-outlet />
-  </div>
+<app-navbar *ngIf="auth.isLoggedIn()"></app-navbar>
+<div class="flex-1 overflow-hidden">
+  <router-outlet></router-outlet>
 </div>
