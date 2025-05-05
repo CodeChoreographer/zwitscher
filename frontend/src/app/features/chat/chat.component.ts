@@ -8,10 +8,7 @@ import { CommonModule } from '@angular/common';
   selector: 'app-chat',
   templateUrl: './chat.component.html',
   standalone: true,
-  imports: [
-    FormsModule,
-    CommonModule
-  ]
+  imports: [FormsModule, CommonModule]
 })
 export class ChatComponent implements OnInit, OnDestroy {
   messages: { user: string; text: string; time: string }[] = [];
@@ -21,24 +18,26 @@ export class ChatComponent implements OnInit, OnDestroy {
   typingTimeout: any;
   activeUsers: string[] = [];
 
-
   constructor(private socketService: SocketService, private auth: AuthService) {}
 
   ngOnInit() {
-      this.username = this.auth.getUsername() ?? 'Unbekannter Benutzer';
-
-      this.socketService.connect();
-
-      this.socketService.emit('registerUser', this.username);
-
-      this.socketService.on('activeUsers', (users: string[]) => {
-        this.activeUsers = users;
-      });
+    this.username = this.auth.getUsername() ?? 'Unbekannter Benutzer';
 
     this.socketService.connect();
+    this.socketService.emit('registerUser', this.username);
+
+    this.socketService.on('activeUsers', (users: string[]) => {
+      this.activeUsers = users;
+    });
+
+    this.socketService.on('loadMessages', (msgs) => {
+      this.messages = msgs;
+      this.scrollToBottom();
+    });
 
     this.socketService.on('chatMessage', (msg: any) => {
       this.messages.push(msg);
+      this.scrollToBottom();
     });
 
     this.socketService.on('typing', (username: string) => {
@@ -72,11 +71,19 @@ export class ChatComponent implements OnInit, OnDestroy {
       this.sendMessage();
     } else {
       this.socketService.emit('typing', this.username);
-
       clearTimeout(this.typingTimeout);
       this.typingTimeout = setTimeout(() => {
         this.socketService.emit('stopTyping');
       }, 2000);
     }
+  }
+
+  private scrollToBottom() {
+    setTimeout(() => {
+      const container = document.querySelector('#messageContainer');
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }, 100);
   }
 }

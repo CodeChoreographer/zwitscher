@@ -1,0 +1,14 @@
+<nav class="flex items-center justify-between px-6 py-4 bg-gray-900 border-b border-gray-700 text-white">
+  <a routerLink="/" class="flex items-center space-x-2">
+    <img src="assets/zwitscher_logo_transparent.png" alt="Zwitscher Logo" class="h-10 w-auto" /> </a>
+  <div class="flex items-center space-x-4">
+
+
+    @if (isLoggedIn()) {
+      <a routerLink="/profile" class="bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 px-6 rounded transition">Mein Profil</a>
+      <button (click)="logout()" class="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-4 py-2 rounded">
+        Abmelden
+      </button>
+    }
+  </div>
+</nav>

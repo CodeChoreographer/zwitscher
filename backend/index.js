@@ -5,6 +5,7 @@ const { Server } = require('socket.io');
 require('dotenv').config();
 
 const initDb = require('./database/initDb');
+const db = require('./database/db');
 const apiRoutes = require('./api/api');
 
 const app = express();
@@ -24,13 +25,29 @@ app.use(express.json());
 initDb();
 apiRoutes(app);
 
-io.on('connection', (socket) => {
+async function loadMessages() {
+    const [rows] = await db.query(`
+        SELECT users.username AS user, 
+               messages.user_id AS userId, 
+               messages.text, 
+               messages.timestamp AS time
+        FROM messages
+        JOIN users ON messages.user_id = users.id
+        ORDER BY messages.timestamp ASC
+    `);
+    return rows;
+}
+
+
+io.on('connection', async (socket) => {
     console.log('🟢 Neuer Client verbunden: ' + socket.id);
 
     socket.on('registerUser', (username) => {
         users.set(socket.id, username);
         io.emit('activeUsers', Array.from(users.values()));
     });
+
+    socket.emit('loadMessages', await loadMessages());
 
     socket.on('disconnect', () => {
         users.delete(socket.id);

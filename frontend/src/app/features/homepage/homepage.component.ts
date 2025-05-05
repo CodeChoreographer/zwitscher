@@ -10,4 +10,7 @@ import {RouterLink} from '@angular/router';
 })
 export class HomepageComponent {
 
+  isLoggedIn(): boolean {
+    return !!localStorage.getItem('token');
+  }
 }
