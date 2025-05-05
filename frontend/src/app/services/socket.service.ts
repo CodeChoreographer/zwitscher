@@ -20,7 +20,7 @@ export class SocketService {
     this.socket.on(event, callback);
   }
 
-  emit(event: string, data: any): void {
+  emit(event: string, data?: any): void {
     this.socket.emit(event, data);
   }
 }

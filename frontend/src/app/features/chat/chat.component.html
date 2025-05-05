@@ -1,31 +1,49 @@
-<div class="flex flex-col h-screen bg-gray-900 text-white p-4">
-  <h2 class="text-2xl text-orange-400 font-bold mb-4">🐦 Zwitscher Chat</h2>
+<div class="flex h-screen bg-gray-900 text-white">
 
-  <div class="flex-1 overflow-y-auto space-y-2 mb-4 p-2 bg-gray-800 rounded">
-    @for (msg of messages; track msg) {
-      <div class="bg-gray-700 px-4 py-2 rounded-md max-w-lg">
-        <div class="text-sm text-gray-400 mb-1">
-          <span class="font-bold text-orange-400">{{ msg.user }}</span>
-          <span class="ml-2">{{ msg.time | date: 'shortTime' }}</span>
+  <div class="flex flex-col flex-1 p-4">
+    <h2 class="text-2xl text-orange-400 font-bold mb-2">🐦 Zwitscher Chat</h2>
+
+    <div class="flex-1 overflow-y-auto space-y-2 mb-4 p-2 bg-gray-800 rounded">
+      @for (msg of messages; track msg) {
+        <div class="bg-gray-700 px-4 py-2 rounded-md max-w-lg">
+          <div class="text-sm text-gray-400 mb-1">
+            <span class="font-bold text-orange-400">{{ msg.user }}</span>
+            <span class="ml-2">{{ msg.time | date: 'shortTime' }}</span>
+          </div>
+          <div>{{ msg.text }}</div>
         </div>
-        <div>{{ msg.text }}</div>
+      }
+    </div>
+
+    @if (typingUser && typingUser !== username) {
+      <div class="text-yellow-400 mb-2">
+        🟡 {{ typingUser }} zwitschert gerade ...
       </div>
     }
+
+    <div class="flex items-center space-x-2">
+      <input
+        [(ngModel)]="message"
+        (keydown)="handleKeyDown($event)"
+        type="text"
+        placeholder="Nachricht eingeben..."
+        class="flex-1 p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
+      />
+      <button
+        (click)="sendMessage()"
+        class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded"
+      >
+        Senden
+      </button>
+    </div>
   </div>
 
-  <div class="flex items-center space-x-2">
-    <input
-      [(ngModel)]="message"
-      (keydown)="handleKeyDown($event)"
-      type="text"
-      placeholder="Nachricht eingeben..."
-      class="flex-1 p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
-    />
-    <button
-      (click)="sendMessage()"
-      class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded"
-    >
-      Senden
-    </button>
+  <div class="w-64 p-4 border-l border-gray-700 bg-gray-800">
+    <h3 class="text-lg font-semibold mb-2 text-orange-300">🟢 Online</h3>
+    @for (user of activeUsers; track user) {
+      <div [ngClass]="{ 'text-green-400': user === username }" class="mb-1">
+        {{ user }} @if (user === username) { <span class="text-gray-400">(du)</span> }
+      </div>
+    }
   </div>
 </div>
