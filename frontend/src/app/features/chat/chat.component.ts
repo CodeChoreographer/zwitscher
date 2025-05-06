@@ -1,8 +1,16 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  AfterViewInit,
+  ViewChild,
+  ElementRef
+} from '@angular/core';
 import { SocketService } from '../../services/socket.service';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
 import { CommonModule } from '@angular/common';
+import { NotificationService } from '../../services/notification.service';
 
 @Component({
   selector: 'app-chat',
@@ -10,43 +18,70 @@ import { CommonModule } from '@angular/common';
   standalone: true,
   imports: [FormsModule, CommonModule]
 })
-export class ChatComponent implements OnInit, OnDestroy {
+export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   messages: { user: string; text: string; time: string }[] = [];
   message = '';
   username = '';
   typingUser: string | null = null;
-  typingTimeout: any;
   activeUsers: string[] = [];
 
-  constructor(private socketService: SocketService, private auth: AuthService) {}
+  @ViewChild('messageContainer') messageContainer!: ElementRef;
+
+  constructor(private socketService: SocketService, private auth: AuthService, private notify: NotificationService) {}
 
   ngOnInit() {
     this.username = this.auth.getUsername() ?? 'Unbekannter Benutzer';
 
     this.socketService.connect();
-    this.socketService.emit('registerUser', this.username);
 
-    this.socketService.on('activeUsers', (users: string[]) => {
-      this.activeUsers = users;
+    this.socketService.on('usernameChanged', ({ oldUsername, newUsername }) => {
+      this.messages = this.messages.map(msg =>
+        msg.user === oldUsername ? { ...msg, user: newUsername } : msg
+      );
+      this.activeUsers = this.activeUsers.map(u =>
+        u === oldUsername ? newUsername : u
+      );
+      if (this.username === oldUsername) {
+        this.username = newUsername;
+        this.auth.setUsername(newUsername);
+        this.notify.info('Dein Benutzername wurde aktualisiert.');
+      }
     });
 
-    this.socketService.on('loadMessages', (msgs) => {
+
+    this.socketService.emit('getMessages');
+
+    this.socketService.on('messages', (msgs) => {
       this.messages = msgs;
-      this.scrollToBottom();
+      setTimeout(() => this.scrollToBottom(), 0);
     });
 
-    this.socketService.on('chatMessage', (msg: any) => {
+    this.socketService.on('chatMessage', (msg) => {
       this.messages.push(msg);
-      this.scrollToBottom();
+      setTimeout(() => this.scrollToBottom(), 0);
     });
 
-    this.socketService.on('typing', (username: string) => {
-      this.typingUser = username;
+    this.socketService.on('typing', (user: string) => {
+      this.typingUser = user;
     });
 
     this.socketService.on('stopTyping', () => {
       this.typingUser = null;
     });
+
+    this.socketService.on('activeUsers', (users: string[]) => {
+      this.activeUsers = users;
+    });
+
+    this.socketService.emit('getMyUsername');
+    this.socketService.on('yourUsername', (uname: string) => {
+      this.username = uname;
+    });
+
+  }
+
+  ngAfterViewInit(): void {
+    this.scrollToBottom();
   }
 
   ngOnDestroy() {
@@ -71,19 +106,19 @@ export class ChatComponent implements OnInit, OnDestroy {
       this.sendMessage();
     } else {
       this.socketService.emit('typing', this.username);
-      clearTimeout(this.typingTimeout);
-      this.typingTimeout = setTimeout(() => {
-        this.socketService.emit('stopTyping');
-      }, 2000);
+      clearTimeout((this as any)._typingTimeout);
+      (this as any)._typingTimeout = setTimeout(() => {
+        this.socketService.emit('stopTyping', null);
+      }, 1000);
     }
   }
 
   private scrollToBottom() {
-    setTimeout(() => {
-      const container = document.querySelector('#messageContainer');
-      if (container) {
-        container.scrollTop = container.scrollHeight;
-      }
-    }, 100);
+    try {
+      this.messageContainer.nativeElement.scrollTop =
+        this.messageContainer.nativeElement.scrollHeight;
+    } catch (err) {
+      console.error('Scroll-Fehler:', err);
+    }
   }
 }
