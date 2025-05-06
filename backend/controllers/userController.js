@@ -88,7 +88,21 @@ class UserController {
             return res.status(400).json({ message: 'Neuer Benutzername ist erforderlich.' });
 
         try {
+            const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [userId]);
+            const oldUsername = user.username;
+
             await db.query('UPDATE users SET username = ? WHERE id = ?', [newUsername, userId]);
+
+
+            const { io } = require('../index');
+            io.emit('chatMessage', {
+                user: 'System',
+                text: `ℹ️ ${oldUsername} heisst jetzt neu ${newUsername}`,
+                time: new Date().toISOString()
+            });
+
+            io.emit('usernameChanged', { oldUsername, newUsername });
+
             res.json({ message: 'Benutzername aktualisiert.' });
         } catch (err) {
             if (err.code === 'ER_DUP_ENTRY') {
@@ -99,6 +113,7 @@ class UserController {
             }
         }
     }
+
 
     async changePassword(req, res) {
         const { oldPassword, newPassword } = req.body;
