@@ -134,12 +134,23 @@ io.on('connection', async (socket) => {
         console.log(`👥 ${users.get(socket.id)} ist dem privaten Raum "${roomName}" beigetreten.`);
     });
 
-    socket.on('privateMessage', (msg) => {
-        const { room, user, text, time } = msg;
-        if (!room || !text || !user) return;
+    socket.on('privateMessage', async (msg) => {
+        const { room, text } = msg;
+        const userId = socket.userId;
 
-        io.to(room).emit('privateMessage', { room, user, text, time });
+        const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [userId]);
+        const fullMessage = {
+            room,
+            user: userId,
+            username: user.username,
+            text,
+            time: new Date().toISOString()
+        };
+
+        io.to(room).emit('privateMessage', fullMessage);
     });
+
+
 
     socket.on('privateChatRequest', async ({ fromId, toId, room }) => {
         console.log('[🔔] PrivateChatRequest empfangen:', { fromId, toId, room });

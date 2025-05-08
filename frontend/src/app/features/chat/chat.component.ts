@@ -44,12 +44,29 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     this.username = this.auth.getUsername() ?? 'Unbekannter Benutzer';
     this.userId = this.auth.getUserId()!;
 
-    // Initialdaten anfordern
+    this.privateChatSub = this.socketService.privateChatRequest$.subscribe(({ fromId, fromUsername, room }) => {
+      // Nur wenn man selbst der Empfänger ist
+      if (fromId === this.userId) return;
+
+
+      // const accept = confirm(`${fromUsername} möchte mit dir einen Privatchat starten. Annehmen?`);
+const accept = true; // funktioniert (eigene confirm funktion bauen bzw angular mat nutzen)
+      this.socketService.emit('privateChatResponse', {
+        fromId: this.userId,
+        toId: fromId,
+        room,
+        accepted: accept
+      });
+
+      if (accept) {
+        this.router.navigate(['/private-chat', fromId]);
+      }
+    });
+
     this.socketService.emit('getActiveUser');
     this.socketService.emit('getMessages');
 
     this.socketService.on('messages', (msgs: ChatMessage[]) => {
-      console.log('[DEBUG] Nachrichten erhalten:', msgs);
       this.messages = msgs;
       setTimeout(() => this.scrollToBottom(), 0);
     });
@@ -76,13 +93,10 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     this.socketService.on('usernameChanged', ({ userId, newUsername }) => {
-      // Update aktive Benutzerliste (optional visuell)
       const user = this.activeUsers.find(u => u.id === userId);
       if (user) {
         user.username = newUsername;
       }
-
-      // Update aller Nachrichten mit dem Benutzer
       this.messages.forEach(msg => {
         if (msg.userId === userId) {
           msg.username = newUsername;
@@ -90,19 +104,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       });
     });
 
-    this.privateChatSub = this.socketService.privateChatRequest$.subscribe(({ fromId, fromUsername, room }) => {
-      const accept = confirm(`${fromUsername} möchte mit dir einen Privatchat starten. Annehmen?`);
-      this.socketService.emit('privateChatResponse', {
-        fromId: this.auth.getUserId(),
-        toId: fromId,
-        room,
-        accepted: accept
-      });
 
-      if (accept) {
-        this.router.navigate(['/private-chat', fromId]);
-      }
-    });
   }
 
   ngAfterViewInit(): void {
