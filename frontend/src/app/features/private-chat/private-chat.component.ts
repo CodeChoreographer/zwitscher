@@ -1,70 +1,79 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+// private-chat.component.ts
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  AfterViewInit,
+  ViewChild,
+  ElementRef
+} from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
+import { FormsModule } from '@angular/forms';
+import { CommonModule } from '@angular/common';
+import { Subscription } from 'rxjs';
 import { SocketService } from '../../services/socket.service';
 import { AuthService } from '../../services/auth.service';
-import { FormsModule } from '@angular/forms';
-import { DatePipe, CommonModule } from '@angular/common';
 import { ChatMessage } from '../../models/chat-message.model';
 
 @Component({
   selector: 'app-private-chat',
   standalone: true,
-  imports: [FormsModule, DatePipe, CommonModule],
+  imports: [FormsModule, CommonModule],
   templateUrl: './private-chat.component.html'
 })
-export class PrivateChatComponent implements OnInit, OnDestroy {
-  targetUserId = 0;
-  targetUsername = '';
-  userId = 0;
-  username = '';
-  room = '';
-  message = '';
+export class PrivateChatComponent implements OnInit, OnDestroy, AfterViewInit {
+  @ViewChild('messageContainer') messageContainer!: ElementRef;
+
   messages: ChatMessage[] = [];
-  systemMessage = '';
-  waitingForResponse = false;
+  message = '';
+  room = '';
+  userId = 0;
+  typingUser: string | null = null;
+  systemMessage: string | null = null;
+  private messageSub!: Subscription;
+  private requestSub!: Subscription;
 
   constructor(
     private route: ActivatedRoute,
-    private socket: SocketService,
-    private auth: AuthService
+    private socketService: SocketService,
+    private authService: AuthService
   ) {}
 
   ngOnInit(): void {
-    this.targetUserId = Number(this.route.snapshot.paramMap.get('userId'));
-    this.userId = this.auth.getUserId()!;
-    this.username = this.auth.getUsername()!;
-    this.room = [this.userId, this.targetUserId].sort().join('-');
+    this.userId = this.authService.getUserId()!;
+    const otherUserId = Number(this.route.snapshot.paramMap.get('id'));
+    this.room = [this.userId, otherUserId].sort().join('-');
 
-    this.socket.emit('joinPrivateRoom', this.room);
+    console.log('[Init] PrivateChatComponent gestartet für Raum:', this.room);
 
-    // Falls wir der Sender sind → zeigen nur Wartetext
-    const fromRoute = this.route.snapshot.queryParamMap.get('initiator');
-    if (fromRoute === 'true') {
-      this.systemMessage = `Warte auf Antwort …`;
-      this.waitingForResponse = true;
-    }
+    this.socketService.connect();
 
-    // Reaktion auf Antwort vom Empfänger
-    this.socket.on('privateChatResponse', (data: any) => {
-      if (data.room !== this.room) return;
-      this.waitingForResponse = false;
+    // Socket Ready melden
+    setTimeout(() => {
+      console.log('[Socket] Client bereit für Privatchat – sende Ready an Server');
+      this.socketService.emit('privateChatReady', {
+        userId: this.userId,
+        room: this.room
+      });
+    }, 300); // kleine Verzögerung für Stabilität
 
-      this.systemMessage = data.accepted
-        ? `Chat angenommen – zwitschert los!`
-        : `Der andere Benutzer hat den Chat abgelehnt.`;
-
-      if (!data.accepted) {
-        setTimeout(() => window.history.back(), 3000);
+    // Nachrichten empfangen
+    this.messageSub = this.socketService.privateMessage$.subscribe(msg => {
+      console.log('[Nachricht erhalten]', msg);
+      if (msg.room === this.room) {
+        this.messages.push(msg);
+        setTimeout(() => this.scrollToBottom(), 0);
       }
     });
 
-    // Falls wir der Empfänger sind → Anfrage entgegennehmen und reagieren
-    this.socket.on('incomingPrivateChatRequest', (data: any) => {
+    // Anfrage empfangen
+    this.requestSub = this.socketService.privateChatRequest$.subscribe(data => {
+      console.log('[PrivateChatRequest empfangen]', data);
       if (data.room !== this.room) return;
+      if (data.fromId === this.userId) return;
 
       const accept = confirm(`${data.fromUsername} möchte mit dir einen Privatchat starten. Annehmen?`);
-
-      this.socket.emit('privateChatResponse', {
+      this.socketService.emit('privateChatResponse', {
         fromId: this.userId,
         toId: data.fromId,
         room: data.room,
@@ -79,40 +88,47 @@ export class PrivateChatComponent implements OnInit, OnDestroy {
         setTimeout(() => window.history.back(), 3000);
       }
     });
-
-    this.socket.on('privateMessage', (msg: ChatMessage) => {
-      if (msg.room === this.room) {
-        this.messages.push(msg);
-      }
-    });
   }
 
+  ngAfterViewInit(): void {
+    this.scrollToBottom();
+  }
 
   ngOnDestroy(): void {
-    this.socket.off('privateChatResponse');
-    this.socket.off('incomingPrivateChatRequest');
-    this.socket.off('privateMessage');
+    this.messageSub?.unsubscribe();
+    this.requestSub?.unsubscribe();
   }
 
-  sendMessage() {
+  sendMessage(): void {
     if (this.message.trim()) {
-      const msg: ChatMessage = {
+      const payload = {
         room: this.room,
-        userId: this.userId,
-        text: this.message,
-        time: new Date().toISOString()
+        text: this.message
       };
-      this.socket.emit('privateMessage', msg);
-      this.messages.push(msg);
+      console.log('[Sende Nachricht]', payload);
+      this.socketService.emit('privateMessage', payload);
       this.message = '';
+    }
+  }
+
+  handleKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      this.sendMessage();
+    }
+  }
+
+  private scrollToBottom(): void {
+    try {
+      this.messageContainer.nativeElement.scrollTop =
+        this.messageContainer.nativeElement.scrollHeight;
+    } catch (err) {
+      console.error('Scroll-Fehler:', err);
     }
   }
 
   getUsernameById(id: number): string {
     if (id === -1) return 'System';
-    if (id === this.userId) return 'Du';
-    if (id === this.targetUserId) return this.targetUsername;
-    return 'Unbekannt';
+    const msg = this.messages.find(m => m.userId === id);
+    return msg?.username ?? 'Unbekannt';
   }
-
 }

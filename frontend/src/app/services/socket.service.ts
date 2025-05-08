@@ -3,13 +3,30 @@ import { io, Socket } from 'socket.io-client';
 import { environment } from '../../environments/environment';
 import { Subject } from 'rxjs';
 
+interface PrivateChatRequest {
+  fromId: number;
+  fromUsername: string;
+  room: string;
+}
+
+interface PrivateMessage {
+  room: string;
+  userId: number;
+  username: string;
+  text: string;
+  time: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class SocketService {
   private socket: Socket | null = null;
   private connected = false;
 
-  private privateChatRequestSubject = new Subject<{ fromId: number, fromUsername: string, room: string }>();
+  private privateChatRequestSubject = new Subject<PrivateChatRequest>();
   public privateChatRequest$ = this.privateChatRequestSubject.asObservable();
+
+  private privateMessageSubject = new Subject<PrivateMessage>();
+  public privateMessage$ = this.privateMessageSubject.asObservable();
 
   connect(): void {
     if (this.connected || this.socket) return;
@@ -31,9 +48,14 @@ export class SocketService {
       console.log('🛑 Socket getrennt');
     });
 
-    this.socket.on('incomingPrivateChatRequest', (data) => {
-      console.log('[📥] Empfangen im SocketService:', data);
+    this.socket.on('incomingPrivateChatRequest', (data: PrivateChatRequest) => {
+      console.log('[📥] PrivateChatRequest empfangen:', data);
       this.privateChatRequestSubject.next(data);
+    });
+
+    this.socket.on('privateMessage', (msg: PrivateMessage) => {
+      console.log('[📩] PrivateMessage empfangen:', msg);
+      this.privateMessageSubject.next(msg);
     });
   }
 
