@@ -96,12 +96,16 @@ class UserController {
 
             const { io } = require('../index');
             io.emit('chatMessage', {
-                user: 'System',
+                userId: -1,
                 text: `ℹ️ ${oldUsername} heisst jetzt neu ${newUsername}`,
                 time: new Date().toISOString()
             });
 
-            io.emit('usernameChanged', { oldUsername, newUsername });
+            io.emit('usernameChanged', {
+                userId,
+                oldUsername,
+                newUsername
+            });
 
             res.json({ message: 'Benutzername aktualisiert.' });
         } catch (err) {
