@@ -5,6 +5,7 @@ import { RegisterComponent } from './features/auth/register/register.component';
 import {ChatComponent} from './features/chat/chat.component';
 import {ProfileUpdateComponent} from './features/profile/profile-update.component';
 import {AuthGuard} from './guards/auth.guard';
+import {PrivateChatComponent} from './features/private-chat/private-chat.component';
 
 export const routes: Routes = [
   { path: '', component: HomepageComponent },
@@ -12,5 +13,6 @@ export const routes: Routes = [
   { path: 'register', component: RegisterComponent },
   { path: 'chat', component: ChatComponent, canActivate: [AuthGuard] },
   { path: 'profile', component: ProfileUpdateComponent, canActivate: [AuthGuard] },
+  { path: 'private-chat/:userId', component: PrivateChatComponent, canActivate: [AuthGuard] },
   { path: '**', redirectTo: '' }
 ];

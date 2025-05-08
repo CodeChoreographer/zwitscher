@@ -1,52 +1,50 @@
 import { Component } from '@angular/core';
 import { Router } from '@angular/router';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
-import {FormsModule} from '@angular/forms';
-import {NotificationService}  from '../../../services/notification.service';
+import { AuthService } from '../../../services/auth.service';
 
 @Component({
   selector: 'app-login',
-  templateUrl: './login.component.html',
   standalone: true,
-  imports: [
-    FormsModule
-  ]
+  imports: [CommonModule, FormsModule],
+  templateUrl: './login.component.html',
 })
 export class LoginComponent {
   username = '';
   password = '';
-  errorMessage = '';
+  error: string | null = null;
 
   constructor(
     private http: HttpClient,
-    private router: Router,
-    private notify: NotificationService
+    private authService: AuthService,
+    private router: Router
   ) {}
 
   get isFormValid(): boolean {
-    return this.username.trim().length > 0 && this.password.trim().length > 0;
+    return this.username.trim() !== '' && this.password.trim() !== '';
+  }
+
+  goToRegister() {
+    this.router.navigate(['/register']);
   }
 
   onSubmit() {
-    this.errorMessage = '';
-
+    this.error = null;
     this.http.post<any>(`${environment.apiUrl}/login`, {
       username: this.username,
       password: this.password
     }).subscribe({
       next: (res) => {
-        localStorage.setItem('token', res.token);
-        this.notify.success('Login erfolgreich 🐦');
-        this.router.navigate(['/chat']);
+        const { token, username } = res;
+        this.authService.login(token, username);
+        this.router.navigate(['/']);
       },
       error: (err) => {
-        this.notify.error(err.error.message || 'Login fehlgeschlagen');
+        this.error = err.error?.message || 'Login fehlgeschlagen';
       }
     });
-  }
-
-  goToRegister() {
-    this.router.navigate(['/register']);
   }
 }

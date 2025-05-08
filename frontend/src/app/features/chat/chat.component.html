@@ -14,12 +14,13 @@
           <div
             class="px-4 py-2 rounded-md max-w-lg"
             [ngClass]="{
-      'bg-gray-700': msg.user !== 'System',
-      'bg-gray-600 italic text-gray-300 text-sm': msg.user === 'System'
-    }"   >
-            @if (msg.user !== 'System') {
+              'bg-gray-700': msg.userId !== -1,
+              'bg-gray-600 italic text-gray-300 text-sm': msg.userId === -1
+            }"
+          >
+            @if (msg.userId !== -1) {
               <div class="text-sm text-gray-400 mb-1">
-                <span class="font-bold text-orange-400">{{ msg.user }}</span>
+                <span class="font-bold text-orange-400">{{ msg.username }}</span>
                 <span class="ml-2">{{ msg.time | date: 'shortTime' }}</span>
               </div>
             }
@@ -52,11 +53,18 @@
   <div class="w-64 p-4 bg-gray-800 border-l border-gray-700 overflow-y-auto">
     <h3 class="text-green-400 font-bold mb-2">🟢 Online</h3>
     <ul class="space-y-1">
-      @for (user of activeUsers; track user) {
+      @for (user of activeUsers; track user.id) {
         <li class="text-green-300">
-          {{ user }} @if (user === username) {
-          <span class="text-sm text-gray-400">(du)</span>
-        }
+          @if (user.id !== userId) {
+            <button
+              (click)="confirmPrivateChat(user)"
+              class="text-green-400 hover:underline hover:text-orange-300"
+            >
+              {{ user.username }}
+            </button>
+          } @else {
+            {{ user.username }} <span class="text-sm text-gray-400">(du)</span>
+          }
         </li>
       }
     </ul>

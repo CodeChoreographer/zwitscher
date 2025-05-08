@@ -1,0 +1,38 @@
+<div class="p-4 text-white bg-gray-900 h-full flex flex-col">
+  <h2 class="text-orange-400 text-xl font-bold mb-2">
+    🕵️‍♂️ Privatchat mit {{ targetUsername }}
+  </h2>
+
+  @if (systemMessage) {
+    <p class="text-sm text-gray-300 mb-2 italic">
+      {{ systemMessage }}
+    </p>
+  }
+
+  <div class="flex-1 overflow-y-auto bg-gray-800 rounded p-2 mb-2">
+    @for (msg of messages; track msg) {
+      <div class="mb-2">
+        <div class="text-sm text-gray-400">
+          <strong class="text-orange-300">{{ msg.username }}</strong>
+          <span class="ml-2">{{ msg.time | date:'shortTime' }}</span>
+        </div>
+        <div>{{ msg.text }}</div>
+      </div>
+    }
+  </div>
+
+  <div class="flex space-x-2 mt-2">
+    <input
+      [(ngModel)]="message"
+      type="text"
+      placeholder="Nachricht eingeben..."
+      class="flex-1 p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
+    />
+    <button
+      (click)="sendMessage()"
+      class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded"
+    >
+      Senden
+    </button>
+  </div>
+</div>
