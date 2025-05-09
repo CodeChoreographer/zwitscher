@@ -15,6 +15,7 @@ import { NotificationService } from '../../services/notification.service';
 import { Router } from '@angular/router';
 import { ChatMessage } from '../../models/chat-message.model';
 import { UserMinimal } from '../../models/user-minimal.model';
+import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 
 @Component({
   selector: 'app-chat',
@@ -37,35 +38,41 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     private socketService: SocketService,
     private auth: AuthService,
     private notify: NotificationService,
-    private router: Router
+    private router: Router,
+    private confirmDialog: ConfirmDialogService
   ) {}
 
   ngOnInit() {
     this.username = this.auth.getUsername() ?? 'Unbekannter Benutzer';
     this.userId = this.auth.getUserId()!;
 
-    this.privateChatSub = this.socketService.privateChatRequest$.subscribe(({ fromId, fromUsername, room }) => {
-      // Nur wenn man selbst der Empfänger ist
-      if (fromId === this.userId) return;
+    // Anfrage entgegennehmen
+    this.privateChatSub = this.socketService.privateChatRequest$.subscribe(
+      async ({ fromId, fromUsername, room }) => {
+        if (fromId === this.userId) return;
 
+        const accept = await this.confirmDialog.confirm(
+          `${fromUsername} möchte mit dir einen Privatchat starten. Annehmen?`
+        );
 
-      // const accept = confirm(`${fromUsername} möchte mit dir einen Privatchat starten. Annehmen?`);
-const accept = true; // funktioniert (eigene confirm funktion bauen bzw angular mat nutzen)
-      this.socketService.emit('privateChatResponse', {
-        fromId: this.userId,
-        toId: fromId,
-        room,
-        accepted: accept
-      });
+        this.socketService.emit('privateChatResponse', {
+          fromId: this.userId,
+          toId: fromId,
+          room,
+          accepted: accept
+        });
 
-      if (accept) {
-        this.router.navigate(['/private-chat', fromId]);
+        if (accept) {
+          this.router.navigate(['/private-chat'], { queryParams: { room } });
+        }
       }
-    });
+    );
 
+    // Initiale Daten laden
     this.socketService.emit('getActiveUser');
     this.socketService.emit('getMessages');
 
+    // Event-Listener
     this.socketService.on('messages', (msgs: ChatMessage[]) => {
       this.messages = msgs;
       setTimeout(() => this.scrollToBottom(), 0);
@@ -104,7 +111,17 @@ const accept = true; // funktioniert (eigene confirm funktion bauen bzw angular 
       });
     });
 
+    this.socketService.on('navigateToPrivateChat', ({ room }) => {
+      this.socketService.emit('joinPrivateRoom', room);
+      this.notify.success('Deine Anfrage wurde angenommen. zwitschert los.');
+      this.router.navigate(['/private-chat'], { queryParams: { room } });
+    });
 
+
+    this.socketService.on('privateChatRejected', () => {
+      this.notify.error('Deine Anfrage wurde abgelehnt. Du bist wieder im öffentlichen Chat.');
+      this.router.navigate(['/chat']);
+    });
   }
 
   ngAfterViewInit(): void {
@@ -120,6 +137,8 @@ const accept = true; // funktioniert (eigene confirm funktion bauen bzw angular 
     this.socketService.off('activeUsers');
     this.socketService.off('yourUsername');
     this.socketService.off('usernameChanged');
+    this.socketService.off('navigateToPrivateChat');
+    this.socketService.off('privateChatRejected');
     this.privateChatSub?.unsubscribe();
   }
 
@@ -147,17 +166,11 @@ const accept = true; // funktioniert (eigene confirm funktion bauen bzw angular 
     }
   }
 
-  private scrollToBottom() {
-    try {
-      this.messageContainer.nativeElement.scrollTop =
-        this.messageContainer.nativeElement.scrollHeight;
-    } catch (err) {
-      console.error('Scroll-Fehler:', err);
-    }
-  }
+  async confirmPrivateChat(user: UserMinimal) {
+    const confirmed = await this.confirmDialog.confirm(
+      `Privatchat mit ${user.username} starten?`
+    );
 
-  confirmPrivateChat(user: UserMinimal) {
-    const confirmed = confirm(`Privatchat mit ${user.username} starten?`);
     if (confirmed) {
       const room = [this.userId, user.id].sort().join('-');
 
@@ -166,10 +179,18 @@ const accept = true; // funktioniert (eigene confirm funktion bauen bzw angular 
         toId: user.id,
         room
       });
+      this.notify.info('Anfrage an ' + user.username + ' gesendet. Warte auf Antwort..');
 
-      this.router.navigate(['/private-chat', user.id], {
-        queryParams: { initiator: 'true' }
-      });
+    }
+  }
+
+
+  private scrollToBottom() {
+    try {
+      this.messageContainer.nativeElement.scrollTop =
+        this.messageContainer.nativeElement.scrollHeight;
+    } catch (err) {
+      console.error('Scroll-Fehler:', err);
     }
   }
 }

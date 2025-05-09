@@ -19,6 +19,10 @@ export class NavbarComponent {
     this.router.navigate(['/']);
   }
 
+  isInPrivateChat(): boolean {
+    return this.router.url.startsWith('/private-chat');
+  }
+
   isLoggedIn(): boolean {
     return this.auth.isLoggedIn();
   }
