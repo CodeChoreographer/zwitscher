@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
 import { AuthService } from '../../../services/auth.service';
+import { NotificationService} from '../../../services/notification.service';
 
 @Component({
   selector: 'app-login',
@@ -20,7 +21,8 @@ export class LoginComponent {
   constructor(
     private http: HttpClient,
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    private notify: NotificationService
   ) {}
 
   get isFormValid(): boolean {
@@ -40,10 +42,13 @@ export class LoginComponent {
       next: (res) => {
         const { token, username } = res;
         this.authService.login(token, username);
+        this.notify.success('Erfolgreich eingeloggt');
         this.router.navigate(['/']);
       },
       error: (err) => {
-        this.error = err.error?.message || 'Login fehlgeschlagen';
+        const errorMessage = err.error?.message || 'Login fehlgeschlagen';
+        this.error = errorMessage;
+        this.notify.error(errorMessage);
       }
     });
   }
