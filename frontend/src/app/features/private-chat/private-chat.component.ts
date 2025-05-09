@@ -1,134 +1,150 @@
-// private-chat.component.ts
 import {
   Component,
   OnInit,
   OnDestroy,
-  AfterViewInit,
   ViewChild,
-  ElementRef
+  ElementRef,
+  AfterViewInit
 } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
-import { FormsModule } from '@angular/forms';
-import { CommonModule } from '@angular/common';
-import { Subscription } from 'rxjs';
+import { ActivatedRoute, Router } from '@angular/router';
 import { SocketService } from '../../services/socket.service';
-import { AuthService } from '../../services/auth.service';
+import { NotificationService } from '../../services/notification.service';
 import { ChatMessage } from '../../models/chat-message.model';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-private-chat',
+  templateUrl: './private-chat.component.html',
   standalone: true,
-  imports: [FormsModule, CommonModule],
-  templateUrl: './private-chat.component.html'
+  imports: [CommonModule, FormsModule]
 })
 export class PrivateChatComponent implements OnInit, OnDestroy, AfterViewInit {
-  @ViewChild('messageContainer') messageContainer!: ElementRef;
-
   messages: ChatMessage[] = [];
   message = '';
+  username = '';
   room = '';
-  userId = 0;
+  userId!: number;
   typingUser: string | null = null;
-  systemMessage: string | null = null;
-  private messageSub!: Subscription;
-  private requestSub!: Subscription;
+
+  @ViewChild('messageContainer') messageContainer!: ElementRef;
 
   constructor(
-    private route: ActivatedRoute,
     private socketService: SocketService,
-    private authService: AuthService
+    private route: ActivatedRoute,
+    private router: Router,
+    private notify: NotificationService,
+    private auth: AuthService
   ) {}
 
-  ngOnInit(): void {
-    this.userId = this.authService.getUserId()!;
-    const otherUserId = Number(this.route.snapshot.paramMap.get('id'));
-    this.room = [this.userId, otherUserId].sort().join('-');
+  ngOnInit() {
+    this.userId = this.auth.getUserId()!;
 
-    console.log('[Init] PrivateChatComponent gestartet für Raum:', this.room);
+    this.route.queryParams.subscribe(params => {
+      const roomId = params['room'];
+      if (!roomId) {
+        this.notify.error('Ungültiger Raumzugriff.');
+        this.router.navigate(['/chat']);
+        return;
+      }
 
-    this.socketService.connect();
+      this.room = roomId;
+      this.socketService.emit('joinPrivateRoom', this.room);
+    });
 
-    // Socket Ready melden
-    setTimeout(() => {
-      console.log('[Socket] Client bereit für Privatchat – sende Ready an Server');
-      this.socketService.emit('privateChatReady', {
-        userId: this.userId,
-        room: this.room
-      });
-    }, 300); // kleine Verzögerung für Stabilität
+    this.socketService.on('unauthorizedRoom', () => {
+      this.notify.error('Zugriff verweigert. Du bist nicht berechtigt, diesen Privatchat zu betreten.');
+      this.router.navigate(['/chat']);
+    });
 
-    // Nachrichten empfangen
-    this.messageSub = this.socketService.privateMessage$.subscribe(msg => {
-      console.log('[Nachricht erhalten]', msg);
-      if (msg.room === this.room) {
+    this.socketService.on('privateMessage', (msg: ChatMessage) => {
+      this.messages.push(msg);
+      setTimeout(() => this.scrollToBottom(), 0);
+    });
+
+    this.socketService.on('typing', (username: string) => {
+      this.typingUser = username;
+    });
+
+    this.socketService.on('stopTyping', () => {
+      this.typingUser = null;
+    });
+
+    this.socketService.on('chatMessage', (msg: ChatMessage) => {
+      if (msg.userId === -1) {
+        this.messages.push({
+          userId: -1,
+          text: msg.text,
+          time: msg.time,
+          username: 'System'
+        });
+      } else {
         this.messages.push(msg);
-        setTimeout(() => this.scrollToBottom(), 0);
       }
+      setTimeout(() => this.scrollToBottom(), 0);
     });
 
-    // Anfrage empfangen
-    this.requestSub = this.socketService.privateChatRequest$.subscribe(data => {
-      console.log('[PrivateChatRequest empfangen]', data);
-      if (data.room !== this.room) return;
-      if (data.fromId === this.userId) return;
-
-      const accept = confirm(`${data.fromUsername} möchte mit dir einen Privatchat starten. Annehmen?`);
-      this.socketService.emit('privateChatResponse', {
-        fromId: this.userId,
-        toId: data.fromId,
-        room: data.room,
-        accepted: accept
+    this.socketService.on('privateChatRejected', () => {
+      this.messages.push({
+        userId: -1,
+        text: '❌ Deine Anfrage wurde abgelehnt.',
+        time: new Date().toISOString(),
+        username: 'System'
       });
-
-      this.systemMessage = accept
-        ? `Du hast den Chat mit ${data.fromUsername} angenommen.`
-        : `Du hast den Chat mit ${data.fromUsername} abgelehnt.`;
-
-      if (!accept) {
-        setTimeout(() => window.history.back(), 3000);
-      }
+      setTimeout(() => this.router.navigate(['/chat']), 2000);
     });
+
+    this.socketService.on('privateChatEnded', () => {
+      setTimeout(() => this.router.navigate(['/chat']), 3000);
+    });
+
   }
 
   ngAfterViewInit(): void {
     this.scrollToBottom();
   }
 
-  ngOnDestroy(): void {
-    this.messageSub?.unsubscribe();
-    this.requestSub?.unsubscribe();
+  ngOnDestroy() {
+    this.socketService.off('privateMessage');
+    this.socketService.off('chatMessage');
+    this.socketService.off('privateChatRejected');
+    this.socketService.off('typing');
+    this.socketService.off('stopTyping');
+    this.socketService.off('unauthorizedRoom');
+    this.socketService.off('privateChatEnded');
   }
 
-  sendMessage(): void {
+  sendMessage() {
     if (this.message.trim()) {
-      const payload = {
+      this.socketService.emit('privateMessage', {
         room: this.room,
         text: this.message
-      };
-      console.log('[Sende Nachricht]', payload);
-      this.socketService.emit('privateMessage', payload);
+      });
       this.message = '';
     }
   }
 
-  handleKeyDown(event: KeyboardEvent): void {
+  handleKeyDown(event: KeyboardEvent) {
     if (event.key === 'Enter') {
       this.sendMessage();
+      this.socketService.emit('stopTyping', this.room);
+    } else {
+      this.socketService.emit('typing', { room: this.room, userId: this.userId });
+
+      clearTimeout((this as any)._typingTimeout);
+      (this as any)._typingTimeout = setTimeout(() => {
+        this.socketService.emit('stopTyping', this.room);
+      }, 1000);
     }
   }
 
-  private scrollToBottom(): void {
+  private scrollToBottom() {
     try {
       this.messageContainer.nativeElement.scrollTop =
         this.messageContainer.nativeElement.scrollHeight;
     } catch (err) {
       console.error('Scroll-Fehler:', err);
     }
-  }
-
-  getUsernameById(id: number): string {
-    if (id === -1) return 'System';
-    const msg = this.messages.find(m => m.userId === id);
-    return msg?.username ?? 'Unbekannt';
   }
 }

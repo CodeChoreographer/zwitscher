@@ -7,7 +7,6 @@ export class AuthService {
 
   login(token: string, username: string): void {
     localStorage.setItem('token', token);
-    localStorage.setItem('username', username);
     this.socketService.connect();
   }
 

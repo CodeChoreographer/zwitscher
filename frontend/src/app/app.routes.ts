@@ -13,6 +13,6 @@ export const routes: Routes = [
   { path: 'register', component: RegisterComponent },
   { path: 'chat', component: ChatComponent, canActivate: [AuthGuard] },
   { path: 'profile', component: ProfileUpdateComponent, canActivate: [AuthGuard] },
-  { path: 'private-chat/:userId', component: PrivateChatComponent, canActivate: [AuthGuard] },
+  { path: 'private-chat', component: PrivateChatComponent, canActivate: [AuthGuard] },
   { path: '**', redirectTo: '' }
 ];
