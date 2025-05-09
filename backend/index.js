@@ -6,6 +6,9 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 require('dotenv').config();
 
+const fetch = require('node-fetch');
+const botController = require('./controllers/aiBotController');
+
 const initDb = require('./database/initDb');
 const db = require('./database/db');
 const apiRoutes = require('./api/api');
@@ -20,12 +23,13 @@ const io = new Server(server, {
 });
 
 const users = new Map();
-const userIdToSockets = new Map(); // userId -> Set(socketIds)
-const roomMap = new Map(); // roomId -> { userA, userB }
-const socketToRooms = new Map(); // socketId -> Set of joined rooms
-const allowedPrivateRooms = new Set(); // Gültige private Räume
+const userIdToSockets = new Map();
+const roomMap = new Map();
+const socketToRooms = new Map();
 
 const PORT = 3000;
+const BOT_USER_ID = -2;
+const BOT_NAME = '🤖 ZwitscherVogel 🐤';
 
 app.use(cors({ origin: 'http://localhost:4200' }));
 app.use(express.json());
@@ -69,7 +73,6 @@ io.use((socket, next) => {
 });
 
 io.on('connection', async (socket) => {
-    console.log("🟢 Neuer Client verbunden " + socket.id);
     const userId = socket.userId;
 
     if (userId) {
@@ -106,9 +109,22 @@ io.on('connection', async (socket) => {
         });
     });
 
-    socket.on('privateChatRequest', async ({ fromId, toId }) => {
-        const room = generateRoomId();
+    socket.on('privateChatRequest', async ({ fromId, toId, room }) => {
+        if (!room) {
+            room = generateRoomId();
+        }
+
         roomMap.set(room, { userA: fromId, userB: toId });
+
+        if (toId === BOT_USER_ID) {
+            const fromSockets = userIdToSockets.get(fromId);
+            if (fromSockets) {
+                for (const socketId of fromSockets) {
+                    io.to(socketId).emit('navigateToPrivateChat', { room });
+                }
+            }
+            return;
+        }
 
         const targetSockets = userIdToSockets.get(toId);
         if (!targetSockets || targetSockets.size === 0) return;
@@ -151,11 +167,9 @@ io.on('connection', async (socket) => {
         }
 
         socket.join(roomName);
-        console.log(`👥 ${users.get(socket.id)} ist dem privaten Raum "${roomName}" beigetreten.`);
 
         if (!socketToRooms.has(socket.id)) socketToRooms.set(socket.id, new Set());
         socketToRooms.get(socket.id).add(roomName);
-
 
         const clients = await io.in(roomName).fetchSockets();
         if (clients.length === 2) {
@@ -172,36 +186,33 @@ io.on('connection', async (socket) => {
         const access = roomMap.get(room);
         if (!access || (userId !== access.userA && userId !== access.userB)) return;
 
+        const otherUserId = userId === access.userA ? access.userB : access.userA;
+
         const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [userId]);
         io.to(room).emit('privateMessage', {
             room, userId, username: user.username, text, time: new Date().toISOString()
         });
+
+        if (otherUserId === BOT_USER_ID) {
+            const botReply = await botController.getBotReply(text);
+            io.to(room).emit('privateMessage', {
+                room,
+                userId: BOT_USER_ID,
+                username: BOT_NAME,
+                text: botReply,
+                time: new Date().toISOString()
+            });
+        }
     });
 
     socket.on('typing', async (data) => {
-        if (typeof data === 'object' && data.room) {
-            const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [data.userId]);
-            if (user) {
-                socket.to(data.room).emit('typing', user.username);
-            }
-        } else {
-            const userId = typeof data === 'number' ? data : socket.userId;
-            const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [userId]);
-            if (user) {
-                socket.broadcast.emit('typing', user.username);
-            }
-        }
+        const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [data.userId]);
+        if (user) socket.to(data.room).emit('typing', user.username);
     });
-
 
     socket.on('stopTyping', (room) => {
-        if (room) {
-            socket.to(room).emit('stopTyping');
-        } else {
-            socket.broadcast.emit('stopTyping');
-        }
+        socket.to(room).emit('stopTyping');
     });
-
 
     socket.on('usernameChanged', ({ userId, newUsername }) => {
         const sockets = userIdToSockets.get(userId);
@@ -217,8 +228,6 @@ io.on('connection', async (socket) => {
     });
 
     socket.on('disconnect', async () => {
-        console.log("🔴 Client " + socket.id + " getrennt");
-
         const userId = socket.userId;
         const username = users.get(socket.id);
         users.delete(socket.id);
@@ -230,10 +239,10 @@ io.on('connection', async (socket) => {
                 userIdToSockets.delete(userId);
             }
         }
+
         const rooms = socketToRooms.get(socket.id) || new Set();
         for (const room of rooms) {
             const remainingClients = (await io.in(room).fetchSockets()).filter(s => s.id !== socket.id);
-
             if (remainingClients.length > 0) {
                 io.to(room).emit('chatMessage', {
                     userId: -1,
@@ -241,19 +250,14 @@ io.on('connection', async (socket) => {
                     text: `🚪 ${username} ist davongeflogen. Der Chat wird geschlossen.`,
                     time: new Date().toISOString()
                 });
-
                 io.to(room).emit('privateChatEnded');
             }
-
             roomMap.delete(room);
-            console.log(`🧹 Raum "${room}" entfernt.`);
         }
 
         socketToRooms.delete(socket.id);
         broadcastActiveUsers();
     });
-
-
 });
 
 server.listen(PORT, () => {

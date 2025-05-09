@@ -111,12 +111,11 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       });
     });
 
-    this.socketService.on('navigateToPrivateChat', ({ room }) => {
+    this.socketService.on('navigateToPrivateChat', ({ room }: { room: string }) => {
       this.socketService.emit('joinPrivateRoom', room);
       this.notify.success('Deine Anfrage wurde angenommen. zwitschert los.');
       this.router.navigate(['/private-chat'], { queryParams: { room } });
     });
-
 
     this.socketService.on('privateChatRejected', () => {
       this.notify.error('Deine Anfrage wurde abgelehnt. Du bist wieder im öffentlichen Chat.');
@@ -180,9 +179,21 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         room
       });
       this.notify.info('Anfrage an ' + user.username + ' gesendet. Warte auf Antwort..');
-
     }
   }
+
+  startBotChat() {
+    const botUserId = -2;
+    const room = [this.userId, botUserId].sort().join('-');
+
+    this.socketService.emit('privateChatRequest', {
+      fromId: this.userId,
+      toId: botUserId,
+      room
+    });
+    this.router.navigate(['/private-chat'], { queryParams: { room } });
+  }
+
 
 
   private scrollToBottom() {
