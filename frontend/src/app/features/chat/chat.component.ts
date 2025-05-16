@@ -16,6 +16,7 @@ import { Router } from '@angular/router';
 import { ChatMessage } from '../../models/chat-message.model';
 import { UserMinimal } from '../../models/user-minimal.model';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-chat',
@@ -30,6 +31,8 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
   username = '';
   typingUser: string | null = null;
   activeUsers: UserMinimal[] = [];
+  selectedFile?: File;
+  selectedFileName?: string;
   private privateChatSub!: Subscription;
 
   @ViewChild('messageContainer') messageContainer!: ElementRef;
@@ -46,7 +49,6 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     this.username = this.auth.getUsername() ?? 'Unbekannter Benutzer';
     this.userId = this.auth.getUserId()!;
 
-    // Anfrage entgegennehmen
     this.privateChatSub = this.socketService.privateChatRequest$.subscribe(
       async ({ fromId, fromUsername, room }) => {
         if (fromId === this.userId) return;
@@ -68,11 +70,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     );
 
-    // Initiale Daten laden
     this.socketService.emit('getActiveUser');
     this.socketService.emit('getMessages');
 
-    // Event-Listener
     this.socketService.on('messages', (msgs: ChatMessage[]) => {
       this.messages = msgs;
       setTimeout(() => this.scrollToBottom(), 0);
@@ -101,31 +101,21 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
     this.socketService.on('usernameChanged', ({ userId, newUsername }) => {
       const user = this.activeUsers.find(u => u.id === userId);
-      if (user) {
-        user.username = newUsername;
-      }
+      if (user) user.username = newUsername;
+
       this.messages.forEach(msg => {
-        if (msg.userId === userId) {
-          msg.username = newUsername;
-        }
+        if (msg.userId === userId) msg.username = newUsername;
       });
     });
 
     this.socketService.on('navigateToPrivateChat', (payload: any) => {
-      if (!payload?.room) {
-        console.error('❌ navigateToPrivateChat: Ungültiger Payload:', payload);
-        return;
-      }
-
-      const { room } = payload;
-      this.socketService.emit('joinPrivateRoom', room);
-      this.notify.success('Deine Anfrage wurde angenommen. zwitschert los.');
-      this.router.navigate(['/private-chat'], { queryParams: { room } });
+      if (!payload?.room) return;
+      this.socketService.emit('joinPrivateRoom', payload.room);
+      this.router.navigate(['/private-chat'], { queryParams: { room: payload.room } });
     });
 
     this.socketService.on('privateChatRejected', () => {
-      this.notify.error('Deine Anfrage wurde abgelehnt. Du bist wieder im öffentlichen Chat.');
-      this.router.navigate(['/chat']);
+      this.notify.error('Deine Anfrage wurde abgelehnt.');
     });
   }
 
@@ -147,14 +137,62 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     this.privateChatSub?.unsubscribe();
   }
 
+  onFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      this.selectedFile = input.files[0];
+      this.selectedFileName = this.selectedFile.name;
+    } else {
+      this.selectedFile = undefined;
+      this.selectedFileName = undefined;
+    }
+  }
+
   sendMessage() {
+    if (this.selectedFile) {
+      const textAfterFile = this.message;
+      const formData = new FormData();
+      formData.append('file', this.selectedFile);
+
+      fetch(`${environment.apiUrl}/upload`, {
+        method: 'POST',
+        body: formData
+      })
+        .then(res => res.json())
+        .then(data => {
+          const fileMsg = `__file__:${data.url}|${data.originalName}`;
+          this.socketService.emit('chatMessage', {
+            userId: this.userId,
+            text: fileMsg,
+            time: new Date().toISOString()
+          });
+
+          this.selectedFile = undefined;
+          this.selectedFileName = undefined;
+
+          if (textAfterFile.trim()) {
+            this.socketService.emit('chatMessage', {
+              userId: this.userId,
+              text: textAfterFile,
+              time: new Date().toISOString()
+            });
+            this.message = '';
+          }
+        })
+        .catch(err => {
+          console.error('Upload-Fehler:', err);
+          this.notify.error('❌ Datei konnte nicht hochgeladen werden.');
+        });
+
+      return;
+    }
+
     if (this.message.trim()) {
-      const chatMessage: ChatMessage = {
+      this.socketService.emit('chatMessage', {
         userId: this.userId,
         text: this.message,
         time: new Date().toISOString()
-      };
-      this.socketService.emit('chatMessage', chatMessage);
+      });
       this.message = '';
     }
   }
@@ -177,32 +215,31 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       { confirmText: 'Ja', cancelText: 'Nein' }
     );
 
-
     if (confirmed) {
-      // Kein festen roomNamen erzeugen, sondern serverseitig generieren lassen
       this.socketService.emit('privateChatRequest', {
         fromId: this.userId,
         toId: user.id
       });
-      this.notify.info('Anfrage an ' + user.username + ' gesendet. Warte auf Antwort...');
+      this.notify.info('Anfrage gesendet.');
     }
   }
 
   startBotChat() {
-    const botUserId = -2;
-
     this.socketService.emit('privateChatRequest', {
       fromId: this.userId,
-      toId: botUserId
+      toId: -2
     });
   }
 
   private scrollToBottom() {
-    try {
-      this.messageContainer.nativeElement.scrollTop =
-        this.messageContainer.nativeElement.scrollHeight;
-    } catch (err) {
-      console.error('Scroll-Fehler:', err);
-    }
+    setTimeout(() => {
+      try {
+        this.messageContainer.nativeElement.scrollTop =
+          this.messageContainer.nativeElement.scrollHeight;
+      } catch (err) {
+        console.error('Scroll-Fehler:', err);
+      }
+    }, 100); // Timeout damit bilder geladen werden können (ggf später durch eine sauberere Funktion lösen)
   }
+
 }
