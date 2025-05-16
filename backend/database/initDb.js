@@ -25,6 +25,7 @@ async function initDb() {
     } catch (err) {
         console.error("❌ Fehler beim Initialisieren der Datenbank:", err.message);
     }
+
 }
 
 module.exports = initDb;

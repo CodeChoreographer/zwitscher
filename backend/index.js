@@ -313,6 +313,7 @@ io.on('connection', async (socket) => {
 
 server.listen(config.port, () => {
     console.log(`✅ Backend + Socket.IO läuft auf http://localhost:${config.port}`);
+    console.log("✅ Frontend läuft auf http://localhost:4200 ");
 });
 
 module.exports = { io };
