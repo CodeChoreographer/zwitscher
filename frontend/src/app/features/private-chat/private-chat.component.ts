@@ -14,6 +14,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
+import { environment } from '../../../environments/environment';
+
 
 @Component({
   selector: 'app-private-chat',
@@ -123,15 +125,15 @@ export class PrivateChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
   sendMessage() {
     if (this.selectedFile) {
-      this.notify.info('📤 Datei wird zuerst gesendet …');
       const textAfterFile = this.message;
       const formData = new FormData();
       formData.append('file', this.selectedFile);
 
-      fetch('/upload', {
+      fetch(`${environment.apiUrl}/upload`, {
         method: 'POST',
         body: formData
       })
+
         .then(res => res.json())
         .then(data => {
           const fileMsg = `__file__:${data.url}|${data.originalName}`;
