@@ -13,6 +13,7 @@ import { ChatMessage } from '../../models/chat-message.model';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
+import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 
 @Component({
   selector: 'app-private-chat',
@@ -27,6 +28,8 @@ export class PrivateChatComponent implements OnInit, OnDestroy, AfterViewInit {
   room = '';
   userId!: number;
   typingUser: string | null = null;
+  selectedFile?: File;
+  selectedFileName?: string;
 
   @ViewChild('messageContainer') messageContainer!: ElementRef;
 
@@ -35,7 +38,8 @@ export class PrivateChatComponent implements OnInit, OnDestroy, AfterViewInit {
     private route: ActivatedRoute,
     private router: Router,
     private notify: NotificationService,
-    private auth: AuthService
+    private auth: AuthService,
+    private confirm: ConfirmDialogService
   ) {}
 
   ngOnInit() {
@@ -54,7 +58,7 @@ export class PrivateChatComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     this.socketService.on('unauthorizedRoom', () => {
-      this.notify.error('Zugriff verweigert. Du bist nicht berechtigt, diesen Privatchat zu betreten.');
+      this.notify.error('Zugriff verweigert.');
       this.router.navigate(['/chat']);
     });
 
@@ -72,16 +76,7 @@ export class PrivateChatComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     this.socketService.on('chatMessage', (msg: ChatMessage) => {
-      if (msg.userId === -1) {
-        this.messages.push({
-          userId: -1,
-          text: msg.text,
-          time: msg.time,
-          username: 'System'
-        });
-      } else {
-        this.messages.push(msg);
-      }
+      this.messages.push(msg);
       setTimeout(() => this.scrollToBottom(), 0);
     });
 
@@ -96,9 +91,9 @@ export class PrivateChatComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     this.socketService.on('privateChatEnded', () => {
-      setTimeout(() => this.router.navigate(['/chat']), 3000);
+      this.notify.info('🚪 Der Chat wurde vom Partner beendet.');
+      setTimeout(() => this.router.navigate(['/chat']), 2000);
     });
-
   }
 
   ngAfterViewInit(): void {
@@ -115,7 +110,55 @@ export class PrivateChatComponent implements OnInit, OnDestroy, AfterViewInit {
     this.socketService.off('privateChatEnded');
   }
 
+  onFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      this.selectedFile = input.files[0];
+      this.selectedFileName = this.selectedFile.name;
+    } else {
+      this.selectedFile = undefined;
+      this.selectedFileName = undefined;
+    }
+  }
+
   sendMessage() {
+    if (this.selectedFile) {
+      this.notify.info('📤 Datei wird zuerst gesendet …');
+      const textAfterFile = this.message;
+      const formData = new FormData();
+      formData.append('file', this.selectedFile);
+
+      fetch('/upload', {
+        method: 'POST',
+        body: formData
+      })
+        .then(res => res.json())
+        .then(data => {
+          const fileMsg = `__file__:${data.url}|${data.originalName}`;
+          this.socketService.emit('privateMessage', {
+            room: this.room,
+            text: fileMsg
+          });
+
+          this.selectedFile = undefined;
+          this.selectedFileName = undefined;
+
+          if (textAfterFile.trim()) {
+            this.socketService.emit('privateMessage', {
+              room: this.room,
+              text: textAfterFile
+            });
+            this.message = '';
+          }
+        })
+        .catch(err => {
+          console.error('Upload-Fehler:', err);
+          this.notify.error('❌ Datei konnte nicht hochgeladen werden.');
+        });
+
+      return;
+    }
+
     if (this.message.trim()) {
       this.socketService.emit('privateMessage', {
         room: this.room,
@@ -136,6 +179,18 @@ export class PrivateChatComponent implements OnInit, OnDestroy, AfterViewInit {
       (this as any)._typingTimeout = setTimeout(() => {
         this.socketService.emit('stopTyping', this.room);
       }, 1000);
+    }
+  }
+
+  async closePrivateChat() {
+    const confirmed = await this.confirm.confirm('Möchtest du den Privatchat wirklich verlassen?', {
+      confirmText: 'Ja',
+      cancelText: 'Nein'
+    });
+
+    if (confirmed) {
+      this.socketService.emit('privateChatEnded', this.room);
+      this.router.navigate(['/chat']);
     }
   }
 

@@ -52,7 +52,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
         if (fromId === this.userId) return;
 
         const accept = await this.confirmDialog.confirm(
-          `${fromUsername} möchte mit dir einen Privatchat starten. Annehmen?`
+          `${fromUsername} möchte mit dir einen Privatchat starten.`
         );
 
         this.socketService.emit('privateChatResponse', {
@@ -111,7 +111,14 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       });
     });
 
-    this.socketService.on('navigateToPrivateChat', ({ room }: { room: string }) => {
+    // Robust gegen Fehler und undefined room
+    this.socketService.on('navigateToPrivateChat', (payload: any) => {
+      if (!payload?.room) {
+        console.error('❌ navigateToPrivateChat: Ungültiger Payload:', payload);
+        return;
+      }
+
+      const { room } = payload;
       this.socketService.emit('joinPrivateRoom', room);
       this.notify.success('Deine Anfrage wurde angenommen. zwitschert los.');
       this.router.navigate(['/private-chat'], { queryParams: { room } });
@@ -167,34 +174,29 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
 
   async confirmPrivateChat(user: UserMinimal) {
     const confirmed = await this.confirmDialog.confirm(
-      `Privatchat mit ${user.username} starten?`
+      `Privatchat mit ${user.username} starten?`,
+      { confirmText: 'Ja', cancelText: 'Nein' }
     );
 
-    if (confirmed) {
-      const room = [this.userId, user.id].sort().join('-');
 
+    if (confirmed) {
+      // Kein festen roomNamen erzeugen, sondern serverseitig generieren lassen
       this.socketService.emit('privateChatRequest', {
         fromId: this.userId,
-        toId: user.id,
-        room
+        toId: user.id
       });
-      this.notify.info('Anfrage an ' + user.username + ' gesendet. Warte auf Antwort..');
+      this.notify.info('Anfrage an ' + user.username + ' gesendet. Warte auf Antwort...');
     }
   }
 
   startBotChat() {
     const botUserId = -2;
-    const room = [this.userId, botUserId].sort().join('-');
 
     this.socketService.emit('privateChatRequest', {
       fromId: this.userId,
-      toId: botUserId,
-      room
+      toId: botUserId
     });
-    this.router.navigate(['/private-chat'], { queryParams: { room } });
   }
-
-
 
   private scrollToBottom() {
     try {

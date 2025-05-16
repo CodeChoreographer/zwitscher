@@ -4,11 +4,12 @@ const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const fetch = require('node-fetch');
+const multer = require('multer');
+const path = require('path');
 require('dotenv').config();
 
-const fetch = require('node-fetch');
 const botController = require('./controllers/aiBotController');
-
 const initDb = require('./database/initDb');
 const db = require('./database/db');
 const apiRoutes = require('./api/api');
@@ -33,9 +34,33 @@ const BOT_NAME = '🤖 ZwitscherVogel 🐤';
 
 app.use(cors({ origin: 'http://localhost:4200' }));
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 initDb();
 apiRoutes(app);
 
+// Multer Upload mit eindeutiger UUID-Dateibenennung
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, 'uploads/'),
+    filename: (req, file, cb) => cb(null, crypto.randomUUID() + path.extname(file.originalname))
+});
+
+const upload = multer({
+    storage,
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        const allowed = ['image/jpeg', 'image/png', 'application/pdf'];
+        allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error('Dateityp nicht erlaubt.'));
+    }
+});
+
+// Upload-Route
+app.post('/upload', upload.single('file'), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'Keine Datei hochgeladen' });
+    const url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    res.json({ url, originalName: req.file.originalname });
+});
+
+// Helper
 function generateRoomId() {
     return crypto.randomBytes(4).toString('hex');
 }
@@ -52,13 +77,13 @@ async function loadMessages() {
 function broadcastActiveUsers() {
     const activeUsers = [];
     for (const [userId, sockets] of userIdToSockets.entries()) {
-        const socketId = Array.from(sockets)[0];
-        const username = users.get(socketId);
+        const username = users.get(Array.from(sockets)[0]);
         if (username) activeUsers.push({ id: userId, username });
     }
     io.emit('activeUsers', activeUsers);
 }
 
+// Auth Middleware
 io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error('Token fehlt'));
@@ -72,11 +97,12 @@ io.use((socket, next) => {
     }
 });
 
+// Socket Events
 io.on('connection', async (socket) => {
     const userId = socket.userId;
 
     if (userId) {
-        let sockets = userIdToSockets.get(userId) || new Set();
+        const sockets = userIdToSockets.get(userId) || new Set();
         sockets.add(socket.id);
         userIdToSockets.set(userId, sockets);
 
@@ -87,52 +113,42 @@ io.on('connection', async (socket) => {
     }
 
     socket.on('getActiveUser', async () => {
-        const userId = socket.userId;
-        if (!userId) return;
-        const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [userId]);
+        const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [socket.userId]);
         if (user) users.set(socket.id, user.username);
         broadcastActiveUsers();
     });
 
     socket.on('getMessages', async () => {
-        const messages = await loadMessages();
-        socket.emit('messages', messages);
+        socket.emit('messages', await loadMessages());
     });
 
     socket.on('chatMessage', async (msg) => {
-        const userId = socket.userId;
-        if (!userId) return;
-        await db.query('INSERT INTO messages (user_id, text) VALUES (?, ?)', [userId, msg.text]);
-        const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [userId]);
+        await db.query('INSERT INTO messages (user_id, text) VALUES (?, ?)', [socket.userId, msg.text]);
+        const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [socket.userId]);
         io.emit('chatMessage', {
-            userId, text: msg.text, time: new Date().toISOString(), username: user.username
+            userId: socket.userId,
+            text: msg.text,
+            time: new Date().toISOString(),
+            username: user.username
         });
     });
 
     socket.on('privateChatRequest', async ({ fromId, toId, room }) => {
-        if (!room) {
-            room = generateRoomId();
-        }
-
-        roomMap.set(room, { userA: fromId, userB: toId });
+        if (!room) room = generateRoomId();
+        roomMap.set(room, { userA: fromId, userB: toId, greeted: false });
 
         if (toId === BOT_USER_ID) {
-            const fromSockets = userIdToSockets.get(fromId);
-            if (fromSockets) {
-                for (const socketId of fromSockets) {
-                    io.to(socketId).emit('navigateToPrivateChat', { room });
-                }
-            }
+            const sockets = userIdToSockets.get(fromId);
+            if (sockets) sockets.forEach(sid => io.to(sid).emit('navigateToPrivateChat', { room }));
             return;
         }
 
-        const targetSockets = userIdToSockets.get(toId);
-        if (!targetSockets || targetSockets.size === 0) return;
-
         const [[fromUser]] = await db.query('SELECT username FROM users WHERE id = ?', [fromId]);
+        const sockets = userIdToSockets.get(toId);
+        if (!sockets) return;
 
-        for (const socketId of targetSockets) {
-            io.to(socketId).emit('incomingPrivateChatRequest', {
+        for (const sid of sockets) {
+            io.to(sid).emit('incomingPrivateChatRequest', {
                 fromId,
                 fromUsername: fromUser.username,
                 room
@@ -140,59 +156,50 @@ io.on('connection', async (socket) => {
         }
     });
 
-    socket.on('privateChatResponse', async ({ fromId, toId, room, accepted }) => {
+    socket.on('privateChatResponse', ({ fromId, toId, room, accepted }) => {
         const toSockets = userIdToSockets.get(toId);
         const fromSockets = userIdToSockets.get(fromId);
         if (!toSockets || !fromSockets) return;
 
-        for (const sid of toSockets) {
-            if (accepted) {
-                io.to(sid).emit('navigateToPrivateChat', { room });
-            } else {
-                io.to(sid).emit('privateChatRejected');
-            }
-        }
-
-        for (const sid of fromSockets) {
-            io.to(sid).emit('privateChatResponse', { fromId, room, accepted });
-        }
+        const event = accepted ? 'navigateToPrivateChat' : 'privateChatRejected';
+        [...toSockets, ...fromSockets].forEach(sid => io.to(sid).emit(event, { room }));
     });
 
     socket.on('joinPrivateRoom', async (roomName) => {
-        const userId = socket.userId;
         const access = roomMap.get(roomName);
-        if (!access || (userId !== access.userA && userId !== access.userB)) {
-            socket.emit('unauthorizedRoom');
-            return;
+        if (!access || ![access.userA, access.userB].includes(socket.userId)) {
+            return socket.emit('unauthorizedRoom');
         }
 
         socket.join(roomName);
-
         if (!socketToRooms.has(socket.id)) socketToRooms.set(socket.id, new Set());
         socketToRooms.get(socket.id).add(roomName);
 
         const clients = await io.in(roomName).fetchSockets();
-        if (clients.length === 2) {
+        if (clients.length === 2 && !access.greeted) {
             io.to(roomName).emit('chatMessage', {
                 userId: -1,
                 text: '🕊️ Alles was hier gezwitschert wird, verfliegt nach dem Verlassen des Chats wieder.',
                 time: new Date().toISOString()
             });
+            access.greeted = true;
         }
     });
 
     socket.on('privateMessage', async ({ room, text }) => {
-        const userId = socket.userId;
         const access = roomMap.get(room);
-        if (!access || (userId !== access.userA && userId !== access.userB)) return;
+        if (!access || ![access.userA, access.userB].includes(socket.userId)) return;
 
-        const otherUserId = userId === access.userA ? access.userB : access.userA;
-
-        const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [userId]);
+        const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [socket.userId]);
         io.to(room).emit('privateMessage', {
-            room, userId, username: user.username, text, time: new Date().toISOString()
+            room,
+            userId: socket.userId,
+            username: user.username,
+            text,
+            time: new Date().toISOString()
         });
 
+        const otherUserId = socket.userId === access.userA ? access.userB : access.userA;
         if (otherUserId === BOT_USER_ID) {
             const botReply = await botController.getBotReply(text);
             io.to(room).emit('privateMessage', {
@@ -205,9 +212,20 @@ io.on('connection', async (socket) => {
         }
     });
 
-    socket.on('typing', async (data) => {
-        const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [data.userId]);
-        if (user) socket.to(data.room).emit('typing', user.username);
+    socket.on('privateChatEnded', (room) => {
+        io.to(room).emit('chatMessage', {
+            userId: -1,
+            username: 'System',
+            text: `🚪 ${username} ist davongeflogen. Der Chat wird geschlossen.`,
+            time: new Date().toISOString()
+        });
+        io.to(room).emit('privateChatEnded');
+        roomMap.delete(room);
+    });
+
+    socket.on('typing', async ({ room, userId }) => {
+        const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [userId]);
+        if (user) socket.to(room).emit('typing', user.username);
     });
 
     socket.on('stopTyping', (room) => {
@@ -221,29 +239,24 @@ io.on('connection', async (socket) => {
     });
 
     socket.on('getMyUsername', async () => {
-        const userId = socket.userId;
-        if (!userId) return;
-        const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [userId]);
+        const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [socket.userId]);
         if (user) socket.emit('yourUsername', user.username);
     });
 
     socket.on('disconnect', async () => {
-        const userId = socket.userId;
         const username = users.get(socket.id);
         users.delete(socket.id);
 
-        const sockets = userIdToSockets.get(userId);
+        const sockets = userIdToSockets.get(socket.userId);
         if (sockets) {
             sockets.delete(socket.id);
-            if (sockets.size === 0) {
-                userIdToSockets.delete(userId);
-            }
+            if (sockets.size === 0) userIdToSockets.delete(socket.userId);
         }
 
         const rooms = socketToRooms.get(socket.id) || new Set();
         for (const room of rooms) {
-            const remainingClients = (await io.in(room).fetchSockets()).filter(s => s.id !== socket.id);
-            if (remainingClients.length > 0) {
+            const clients = (await io.in(room).fetchSockets()).filter(s => s.id !== socket.id);
+            if (clients.length > 0) {
                 io.to(room).emit('chatMessage', {
                     userId: -1,
                     username: 'System',
