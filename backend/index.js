@@ -1,4 +1,6 @@
+const config = require('./config');
 const express = require('express');
+const helmet = require('helmet');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -18,35 +20,44 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: 'http://localhost:4200',
+        origin: config.frontendUrl,
         methods: ['GET', 'POST']
     }
 });
 
-const users = new Map();
-const userIdToSockets = new Map();
-const roomMap = new Map();
-const socketToRooms = new Map();
-
-const PORT = 3000;
-const BOT_USER_ID = -2;
-const BOT_NAME = '🤖 ZwitscherVogel 🐤';
-
-app.use(cors({ origin: 'http://localhost:4200' }));
+// Sicherheit & CORS
+app.use(cors({
+    origin: config.frontendUrl,
+    methods: ['GET', 'POST', 'PUT'],
+    credentials: true
+}));
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(
+    helmet({
+        crossOriginResourcePolicy: { policy: 'cross-origin' },
+    })
+);
+
+// Statische Uploads bereitstellen
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+    setHeaders: (res) => {
+        res.setHeader('Access-Control-Allow-Origin', config.frontendUrl);
+    }
+}));
+
 initDb();
 apiRoutes(app);
 
+// Multer-Konfiguration
 const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, 'uploads/'),
-    filename: (req, file, cb) => cb(null, crypto.randomUUID() + path.extname(file.originalname))
+    destination: (_, __, cb) => cb(null, 'uploads/'),
+    filename: (_, file, cb) => cb(null, crypto.randomUUID() + path.extname(file.originalname))
 });
 
 const upload = multer({
     storage,
     limits: { fileSize: 5 * 1024 * 1024 },
-    fileFilter: (req, file, cb) => {
+    fileFilter: (_, file, cb) => {
         const allowed = ['image/jpeg', 'image/png', 'application/pdf'];
         allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error('Dateityp nicht erlaubt.'));
     }
@@ -58,6 +69,7 @@ app.post('/upload', upload.single('file'), (req, res) => {
     res.json({ url, originalName: req.file.originalname });
 });
 
+// Hilfsfunktionen
 function generateRoomId() {
     return crypto.randomBytes(4).toString('hex');
 }
@@ -74,17 +86,40 @@ async function loadMessages() {
 function broadcastActiveUsers() {
     const activeUsers = [];
     for (const [userId, sockets] of userIdToSockets.entries()) {
-        const username = users.get(Array.from(sockets)[0]);
+        const username = users.get([...sockets][0]);
         if (username) activeUsers.push({ id: userId, username });
     }
     io.emit('activeUsers', activeUsers);
 }
 
+function handlePrivateChatEnd(room, username, reason = 'hat den Privatchat verlassen') {
+    io.to(room).emit('chatMessage', {
+        userId: -1,
+        username: 'System',
+        text: `🚪 ${username} ${reason}. Der Chat wird geschlossen.`,
+        time: new Date().toISOString()
+    });
+
+    io.to(room).emit('privateChatEnded');
+    roomMap.delete(room);
+}
+
+// Datenstrukturen
+const users = new Map();
+const userIdToSockets = new Map();
+const roomMap = new Map();
+const socketToRooms = new Map();
+
+const BOT_USER_ID = -2;
+const BOT_NAME = '🤖 ZwitscherVogel 🐤';
+
+// Authentifizierung
 io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error('Token fehlt'));
+
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'zwitschernistcool');
+        const decoded = jwt.verify(token, config.jwtSecret);
         socket.userId = decoded.userId;
         next();
     } catch (err) {
@@ -93,6 +128,7 @@ io.use((socket, next) => {
     }
 });
 
+// Socket.IO Events
 io.on('connection', async (socket) => {
     const userId = socket.userId;
 
@@ -207,6 +243,11 @@ io.on('connection', async (socket) => {
         }
     });
 
+    socket.on('privateChatEnded', (room) => {
+        const username = users.get(socket.id) || 'Unbekannt';
+        handlePrivateChatEnd(room, username, 'hat den Privatchat verlassen');
+    });
+
     socket.on('typing', async ({ room, userId }) => {
         const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [userId]);
         if (user) socket.to(room).emit('typing', user.username);
@@ -248,16 +289,8 @@ io.on('connection', async (socket) => {
             }
 
             if (clients.length > 0) {
-                io.to(room).emit('chatMessage', {
-                    userId: -1,
-                    username: 'System',
-                    text: `🚪 ${username} ist davongeflogen. Der Chat wird geschlossen.`,
-                    time: new Date().toISOString()
-                });
-                io.to(room).emit('privateChatEnded');
+                handlePrivateChatEnd(room, username, 'hat sich abgemeldet');
             }
-
-            roomMap.delete(room);
         }
 
         socketToRooms.delete(socket.id);
@@ -265,8 +298,8 @@ io.on('connection', async (socket) => {
     });
 });
 
-server.listen(PORT, () => {
-    console.log(`✅ Backend + Socket.IO läuft auf http://localhost:${PORT}`);
+server.listen(config.port, () => {
+    console.log(`✅ Backend + Socket.IO läuft auf http://localhost:${config.port}`);
 });
 
 module.exports = { io };

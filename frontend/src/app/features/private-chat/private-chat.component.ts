@@ -93,7 +93,6 @@ export class PrivateChatComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     this.socketService.on('privateChatEnded', () => {
-      this.notify.info('🚪 Der Chat wurde vom Partner beendet.');
       setTimeout(() => this.router.navigate(['/chat']), 2000);
     });
   }
