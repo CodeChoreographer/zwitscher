@@ -201,7 +201,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
     if (event.key === 'Enter') {
       this.sendMessage();
     } else {
-      this.socketService.emit('typing', this.userId);
+      this.socketService.emit('typing', { userId: this.userId });
       clearTimeout((this as any)._typingTimeout);
       (this as any)._typingTimeout = setTimeout(() => {
         this.socketService.emit('stopTyping', null);
