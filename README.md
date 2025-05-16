@@ -35,7 +35,7 @@
 > Voraussetzung: [Docker Desktop](https://www.docker.com/products/docker-desktop/) installiert
 
 ```bash
-git clone https://github.com/dein-benutzername/zwitscher.git
+git clone https://github.com/CodeChoreographer/zwitscher.git
 cd zwitscher
 docker compose up --build
 ```
