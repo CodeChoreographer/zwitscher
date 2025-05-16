@@ -20,13 +20,12 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
+  backend1:
     build:
       context: ./backend
-    container_name: zwitscher-backend
     restart: always
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     depends_on:
       db:
         condition: service_healthy
@@ -38,6 +37,34 @@ services:
       JWT_SECRET: zwitschernistcool
       JWT_EXPIRES_IN: 5h
 
+  backend2:
+    build:
+      context: ./backend
+    restart: always
+    expose:
+      - "3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_USER: zwitscher_user
+      DB_PASSWORD: secret
+      DB_NAME: zwitscher
+      JWT_SECRET: zwitschernistcool
+      JWT_EXPIRES_IN: 5h
+
+  nginx:
+    image: nginx:alpine
+    container_name: zwitscher-lb
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend1
+      - backend2
+    volumes:
+      - ./nginx-lb.conf:/etc/nginx/nginx.conf:ro
+
   frontend:
     build:
       context: ./frontend
@@ -46,7 +73,7 @@ services:
     ports:
       - "4200:80"
     depends_on:
-      - backend
+      - nginx
 
 volumes:
   db_data:
