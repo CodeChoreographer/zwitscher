@@ -25,12 +25,31 @@
               </div>
             }
 
-            <div>
-              {{ msg.text }}
-            </div>
+            @if (msg.text.startsWith('__file__')) {
+              @if (msg.text.split('|')[0].includes('.png') || msg.text.split('|')[0].includes('.jpg') || msg.text.split('|')[0].includes('.jpeg')) {
+                <img [src]="msg.text.replace('__file__:', '').split('|')[0]" [alt]="msg.text.split('|')[1]" class="max-w-xs rounded mt-1" />
+              } @else {
+                <a
+                  [href]="msg.text.replace('__file__:', '').split('|')[0]"
+                  download="{{ msg.text.split('|')[1] }}"
+                  class="text-blue-400 hover:underline"
+                >
+                  📎 {{ msg.text.split('|')[1] }}
+                </a>
+              }
+            } @else {
+              <div>{{ msg.text }}</div>
+            }
           </div>
         }
       </div>
+
+      @if (selectedFileName) {
+        <div class="text-sm text-gray-300 mt-2">
+          📎 {{ selectedFileName }}
+          <button (click)="selectedFile = undefined; selectedFileName = undefined" class="ml-2 text-red-400 hover:underline">Entfernen</button>
+        </div>
+      }
 
       <div class="mt-2 flex items-center space-x-2 shrink-0">
         <input
@@ -40,6 +59,10 @@
           placeholder="Nachricht eingeben..."
           class="flex-1 p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
         />
+        <label class="cursor-pointer text-blue-400 text-sm">
+          📎
+          <input type="file" (change)="onFileSelected($event)" hidden />
+        </label>
         <button
           (click)="sendMessage()"
           class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded"
@@ -67,6 +90,7 @@
           }
         </li>
       }
+
       <div class="mt-4">
         <button
           (click)="startBotChat()"
@@ -75,7 +99,6 @@
           🤖 Zwitschervogel fragen 🐤
         </button>
       </div>
-
     </ul>
   </div>
 </div>
