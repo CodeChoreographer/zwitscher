@@ -248,14 +248,27 @@ io.on('connection', async (socket) => {
         handlePrivateChatEnd(room, username, 'hat den Privatchat verlassen');
     });
 
-    socket.on('typing', async ({ room, userId }) => {
-        const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [userId]);
-        if (user) socket.to(room).emit('typing', user.username);
+    socket.on('typing', async (data) => {
+        if (typeof data === 'object' && data.room) {
+            // Privatchat
+            const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [data.userId]);
+            if (user) socket.to(data.room).emit('typing', user.username);
+        } else if (typeof data === 'object' && data.userId) {
+            // Öffentlicher Chat – basierend auf userId
+            const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [data.userId]);
+            if (user) socket.broadcast.emit('typing', user.username);
+        }
     });
 
+
     socket.on('stopTyping', (room) => {
-        socket.to(room).emit('stopTyping');
+        if (room) {
+            socket.to(room).emit('stopTyping'); // Privatchat
+        } else {
+            socket.broadcast.emit('stopTyping'); // Öffentlich
+        }
     });
+
 
     socket.on('usernameChanged', ({ userId, newUsername }) => {
         const sockets = userIdToSockets.get(userId);
