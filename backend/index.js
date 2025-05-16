@@ -38,7 +38,6 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 initDb();
 apiRoutes(app);
 
-// Multer Upload mit eindeutiger UUID-Dateibenennung
 const storage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, 'uploads/'),
     filename: (req, file, cb) => cb(null, crypto.randomUUID() + path.extname(file.originalname))
@@ -53,14 +52,12 @@ const upload = multer({
     }
 });
 
-// Upload-Route
 app.post('/upload', upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Keine Datei hochgeladen' });
     const url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
     res.json({ url, originalName: req.file.originalname });
 });
 
-// Helper
 function generateRoomId() {
     return crypto.randomBytes(4).toString('hex');
 }
@@ -83,7 +80,6 @@ function broadcastActiveUsers() {
     io.emit('activeUsers', activeUsers);
 }
 
-// Auth Middleware
 io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error('Token fehlt'));
@@ -97,7 +93,6 @@ io.use((socket, next) => {
     }
 });
 
-// Socket Events
 io.on('connection', async (socket) => {
     const userId = socket.userId;
 
@@ -212,17 +207,6 @@ io.on('connection', async (socket) => {
         }
     });
 
-    socket.on('privateChatEnded', (room) => {
-        io.to(room).emit('chatMessage', {
-            userId: -1,
-            username: 'System',
-            text: `🚪 ${username} ist davongeflogen. Der Chat wird geschlossen.`,
-            time: new Date().toISOString()
-        });
-        io.to(room).emit('privateChatEnded');
-        roomMap.delete(room);
-    });
-
     socket.on('typing', async ({ room, userId }) => {
         const [[user]] = await db.query('SELECT username FROM users WHERE id = ?', [userId]);
         if (user) socket.to(room).emit('typing', user.username);
@@ -244,7 +228,7 @@ io.on('connection', async (socket) => {
     });
 
     socket.on('disconnect', async () => {
-        const username = users.get(socket.id);
+        const username = users.get(socket.id) || 'Unbekannt';
         users.delete(socket.id);
 
         const sockets = userIdToSockets.get(socket.userId);
@@ -256,6 +240,13 @@ io.on('connection', async (socket) => {
         const rooms = socketToRooms.get(socket.id) || new Set();
         for (const room of rooms) {
             const clients = (await io.in(room).fetchSockets()).filter(s => s.id !== socket.id);
+            const access = roomMap.get(room);
+
+            if (access && (access.userA === BOT_USER_ID || access.userB === BOT_USER_ID)) {
+                roomMap.delete(room);
+                continue;
+            }
+
             if (clients.length > 0) {
                 io.to(room).emit('chatMessage', {
                     userId: -1,
@@ -265,6 +256,7 @@ io.on('connection', async (socket) => {
                 });
                 io.to(room).emit('privateChatEnded');
             }
+
             roomMap.delete(room);
         }
 

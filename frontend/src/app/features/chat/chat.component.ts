@@ -111,7 +111,6 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewInit {
       });
     });
 
-    // Robust gegen Fehler und undefined room
     this.socketService.on('navigateToPrivateChat', (payload: any) => {
       if (!payload?.room) {
         console.error('❌ navigateToPrivateChat: Ungültiger Payload:', payload);
