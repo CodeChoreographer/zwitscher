@@ -1,6 +1,6 @@
 # 🐦 Zwitscher – Moderne Chat-Anwendung mit Docker und WebSocket
 
-**Zwitscher** ist eine moderne, containerisierte Chat-App mit Angular, Node.js, WebSockets und MariaDB – ideal für Echtzeit-Kommunikation im IT-Helpdesk oder zur privaten Nutzung.
+**Zwitscher** ist die schweizer Chat App für alle die sich gerne auszwitschern
 
 ---
 
