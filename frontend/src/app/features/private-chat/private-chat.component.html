@@ -1,6 +1,14 @@
 <div class="flex h-full bg-gray-900 text-white overflow-hidden">
   <div class="flex flex-col flex-1 p-4">
-    <h2 class="text-2xl text-orange-400 font-bold mb-2">Privater Zwitscher-Chat</h2>
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-2xl text-orange-400 font-bold">Privater Zwitscher-Chat</h2>
+      <button
+        (click)="closePrivateChat()"
+        class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+      >
+        ❌ Privatchat schliessen
+      </button>
+    </div>
 
     <div class="flex flex-col flex-1 min-h-0">
       <div #messageContainer class="flex-1 overflow-y-auto space-y-2 p-2 bg-gray-800 rounded">
@@ -18,7 +26,21 @@
                 <span class="ml-2">{{ msg.time | date: 'shortTime' }}</span>
               </div>
             }
-            <div>{{ msg.text }}</div>
+            @if (msg.text.startsWith('__file__')) {
+              @if (msg.text.split('|')[0].includes('.png') || msg.text.split('|')[0].includes('.jpg') || msg.text.split('|')[0].includes('.jpeg')) {
+                <img [src]="msg.text.replace('__file__:', '').split('|')[0]" [alt]="msg.text.split('|')[1]" class="max-w-xs rounded mt-1" />
+              } @else {
+                <a
+                  [href]="msg.text.replace('__file__:', '').split('|')[0]"
+                  download="{{ msg.text.split('|')[1] }}"
+                  class="text-blue-400 hover:underline"
+                >
+                  📎 {{ msg.text.split('|')[1] }}
+                </a>
+              }
+            } @else {
+              <div>{{ msg.text }}</div>
+            }
           </div>
         }
       </div>
@@ -26,6 +48,13 @@
       @if (typingUser && typingUser !== username) {
         <div class="text-yellow-400 mb-2">
           🟡 {{ typingUser }} zwitschert gerade ...
+        </div>
+      }
+
+      @if (selectedFileName) {
+        <div class="text-sm text-gray-300 mt-2">
+          📎 {{ selectedFileName }}
+          <button (click)="selectedFile = undefined; selectedFileName = undefined" class="ml-2 text-red-400 hover:underline">Entfernen</button>
         </div>
       }
 
@@ -37,6 +66,12 @@
           placeholder="Nachricht eingeben..."
           class="flex-1 p-2 rounded bg-gray-700 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
         />
+
+        <label class="cursor-pointer text-blue-400 text-sm">
+          📎
+          <input type="file" (change)="onFileSelected($event)" hidden />
+        </label>
+
         <button
           (click)="sendMessage()"
           class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded"

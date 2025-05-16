@@ -3,17 +3,17 @@
 
   <div class="flex justify-end gap-4">
     <button
-      class="border-gray-500 text-gray-300 hover:border-gray-400 hover:text-white cursor-pointer"
+      class="border border-gray-500 text-gray-300 hover:border-gray-400 hover:text-white px-4 py-2 rounded"
       (click)="dialogRef.close(false)"
     >
-      Ablehnen
+      {{ data.cancelText }}
     </button>
 
     <button
-      class="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-4 py-2 rounded cursor-pointer"
+      class="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-4 py-2 rounded"
       (click)="dialogRef.close(true)"
     >
-      Annehmen
+      {{ data.confirmText }}
     </button>
   </div>
 </div>
