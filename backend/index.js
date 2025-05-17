@@ -9,12 +9,18 @@ const crypto = require('crypto');
 const fetch = require('node-fetch');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const botController = require('./controllers/aiBotController');
 const initDb = require('./database/initDb');
 const db = require('./database/db');
 const apiRoutes = require('./api/api');
+const uploadsPath = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsPath)) {
+    fs.mkdirSync(uploadsPath);
+    console.log('📁 Upload-Ordner erstellt');
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -65,7 +71,7 @@ const upload = multer({
 
 app.post('/upload', upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Keine Datei hochgeladen' });
-    const url = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    const url = `${config.uploadHost}/uploads/${req.file.filename}`;
     res.json({ url, originalName: req.file.originalname });
 });
 

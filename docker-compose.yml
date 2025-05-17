@@ -36,6 +36,8 @@ services:
       DB_NAME: zwitscher
       JWT_SECRET: zwitschernistcool
       JWT_EXPIRES_IN: 5h
+    volumes:
+      - ./backend/uploads:/app/uploads
 
   backend2:
     build:
@@ -53,6 +55,8 @@ services:
       DB_NAME: zwitscher
       JWT_SECRET: zwitschernistcool
       JWT_EXPIRES_IN: 5h
+    volumes:
+      - ./backend/uploads:/app/uploads
 
   nginx:
     image: nginx:alpine

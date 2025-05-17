@@ -10,5 +10,6 @@ module.exports = {
         user: process.env.DB_USER || 'zwitscher_user',
         password: process.env.DB_PASSWORD || 'secret',
         name: process.env.DB_NAME || 'zwitscher'
-    }
+    },
+    uploadHost: process.env.UPLOAD_HOST || 'http://localhost:3000'
 };
